@@ -1,0 +1,286 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, CheckCircle, Clock, Users, Gift } from 'lucide-react';
+import { useUserStore } from '../stores/userStore';
+import { usePostStore } from '../stores/postStore';
+import { formatPrice } from '../utils/formatters';
+import { scaleIn } from '../animations/fadeIn';
+import Button from './Button';
+
+const SurveyModal = ({ isOpen, onClose, post }) => {
+  const { getWalletAddress } = useUserStore();
+  const { completeSurvey, isLoading } = usePostStore();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [responses, setResponses] = useState({});
+  const [isCompleted, setIsCompleted] = useState(false);
+
+  const walletAddress = getWalletAddress();
+
+  const handleResponse = (questionId, answer) => {
+    setResponses(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+  };
+
+  const handleNext = () => {
+    if (currentStep < post.questions.length - 1) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      handleSubmit();
+    }
+  };
+
+  const handlePrevious = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    try {
+      await completeSurvey(post.id, responses, walletAddress);
+      setIsCompleted(true);
+    } catch (error) {
+      console.error('Failed to complete survey:', error);
+    }
+  };
+
+  const isCurrentQuestionAnswered = () => {
+    const currentQuestion = post.questions[currentStep];
+    return responses[currentQuestion.id] !== undefined;
+  };
+
+  const renderQuestion = (question) => {
+    switch (question.type) {
+      case 'multiple-choice':
+        return (
+          <div className="space-y-3">
+            {question.options.map((option, index) => (
+              <button
+                key={index}
+                onClick={() => handleResponse(question.id, option)}
+                className={`
+                  w-full p-4 text-left rounded-lg border-2 transition-all
+                  ${responses[question.id] === option
+                    ? 'border-movement-500 bg-movement-50 text-movement-700'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                  }
+                `}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        );
+
+      case 'checkbox':
+        return (
+          <div className="space-y-3">
+            {question.options.map((option, index) => {
+              const currentResponses = responses[question.id] || [];
+              const isSelected = currentResponses.includes(option);
+              
+              return (
+                <button
+                  key={index}
+                  onClick={() => {
+                    const newResponses = isSelected
+                      ? currentResponses.filter(r => r !== option)
+                      : [...currentResponses, option];
+                    handleResponse(question.id, newResponses);
+                  }}
+                  className={`
+                    w-full p-4 text-left rounded-lg border-2 transition-all flex items-center
+                    ${isSelected
+                      ? 'border-movement-500 bg-movement-50 text-movement-700'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }
+                  `}
+                >
+                  <div className={`
+                    w-4 h-4 rounded border-2 mr-3 flex items-center justify-center
+                    ${isSelected ? 'bg-movement-500 border-movement-500' : 'border-gray-300'}
+                  `}>
+                    {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                  </div>
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+        );
+
+      case 'rating':
+        return (
+          <div className="flex justify-center space-x-2">
+            {Array.from({ length: question.max }, (_, i) => i + 1).map((rating) => (
+              <button
+                key={rating}
+                onClick={() => handleResponse(question.id, rating)}
+                className={`
+                  w-12 h-12 rounded-full border-2 font-semibold transition-all
+                  ${responses[question.id] === rating
+                    ? 'border-movement-500 bg-movement-500 text-white'
+                    : 'border-gray-300 hover:border-movement-300 text-gray-600'
+                  }
+                `}
+              >
+                {rating}
+              </button>
+            ))}
+          </div>
+        );
+
+      case 'text':
+        return (
+          <textarea
+            value={responses[question.id] || ''}
+            onChange={(e) => handleResponse(question.id, e.target.value)}
+            placeholder="Type your answer here..."
+            className="w-full p-4 border-2 border-gray-300 rounded-lg focus:border-movement-500 focus:outline-none resize-none"
+            rows={4}
+          />
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  if (!isOpen || !post) return null;
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50"
+          onClick={onClose}
+        />
+
+        {/* Modal */}
+        <div className="flex min-h-full items-center justify-center p-4">
+          <motion.div
+            {...scaleIn}
+            className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
+          >
+            {!isCompleted ? (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center">
+                    <Gift className="w-6 h-6 text-movement-500 mr-2" />
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {post.title}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Survey Info */}
+                <div className="bg-gradient-to-r from-movement-50 to-purple-50 rounded-lg p-4 mb-6">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center text-gray-600">
+                      <Clock className="w-4 h-4 mr-1" />
+                      {post.estimatedTime} min
+                    </div>
+                    <div className="flex items-center text-gray-600">
+                      <Users className="w-4 h-4 mr-1" />
+                      {post.responses}/{post.maxResponses} responses
+                    </div>
+                    <div className="font-semibold text-movement-600">
+                      Earn {formatPrice(post.reward)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mb-6">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>Question {currentStep + 1} of {post.questions.length}</span>
+                    <span>{Math.round(((currentStep + 1) / post.questions.length) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-movement-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${((currentStep + 1) / post.questions.length) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Question */}
+                <div className="mb-8">
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">
+                    {post.questions[currentStep].question}
+                  </h4>
+                  {renderQuestion(post.questions[currentStep])}
+                </div>
+
+                {/* Navigation */}
+                <div className="flex justify-between">
+                  <Button
+                    variant="secondary"
+                    onClick={handlePrevious}
+                    disabled={currentStep === 0}
+                  >
+                    Previous
+                  </Button>
+                  
+                  <Button
+                    onClick={handleNext}
+                    disabled={!isCurrentQuestionAnswered()}
+                    loading={isLoading && currentStep === post.questions.length - 1}
+                  >
+                    {currentStep === post.questions.length - 1 ? 'Submit Survey' : 'Next'}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              /* Completion Screen */
+              <div className="text-center py-8">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
+                >
+                  <CheckCircle className="w-8 h-8 text-green-500" />
+                </motion.div>
+                
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                  Survey Completed!
+                </h3>
+                
+                <p className="text-gray-600 mb-4">
+                  Thank you for your participation. You've earned:
+                </p>
+                
+                <div className="text-3xl font-bold text-movement-600 mb-6">
+                  {formatPrice(post.reward)}
+                </div>
+                
+                <p className="text-sm text-gray-500 mb-6">
+                  Rewards have been sent to your wallet
+                </p>
+                
+                <Button onClick={onClose} size="lg">
+                  Continue Exploring
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      </div>
+    </AnimatePresence>
+  );
+};
+
+export default SurveyModal;
