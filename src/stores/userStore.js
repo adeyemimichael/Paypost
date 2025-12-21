@@ -6,7 +6,13 @@ export const useUserStore = create((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   
-  setUser: (user) => set({ user, isAuthenticated: !!user }),
+  setUser: (user) => {
+    const currentUser = get().user;
+    // Only update if user actually changed
+    if (!currentUser || currentUser.id !== user?.id) {
+      set({ user, isAuthenticated: !!user });
+    }
+  },
   
   setLoading: (isLoading) => set({ isLoading }),
   

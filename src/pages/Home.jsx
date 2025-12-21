@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { ArrowRight, Zap, Shield, DollarSign } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { fadeIn, slideUp } from '../animations/fadeIn';
@@ -66,23 +67,34 @@ const Home = () => {
               transition={{ delay: 0.2 }}
               className="flex flex-col sm:flex-row gap-4 justify-center items-center"
             >
-              <Button
-                size="lg"
-                onClick={handleGetStarted}
-                loading={isLoading}
-                className="px-8 py-4"
-              >
-                {isAuthenticated ? 'Start Earning' : 'Get Started'}
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
+              {isAuthenticated ? (
+                <Link to="/feed">
+                  <Button size="lg" className="px-8 py-4">
+                    Start Earning
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                </Link>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleGetStarted}
+                  loading={isLoading}
+                  className="px-8 py-4"
+                >
+                  Get Started
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              )}
               
-              <Button
-                variant="outline"
-                size="lg"
-                className="px-8 py-4"
-              >
-                Learn More
-              </Button>
+              <Link to="/creators">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="px-8 py-4"
+                >
+                  Meet Creators
+                </Button>
+              </Link>
             </motion.div>
           </div>
         </div>
@@ -145,16 +157,29 @@ const Home = () => {
           <p className="text-xl text-movement-100 mb-8">
             Join thousands earning MOVE tokens through surveys and accessing premium Web3 content.
           </p>
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={handleGetStarted}
-            loading={isLoading}
-            className="px-8 py-4 bg-white text-movement-600 hover:bg-gray-100"
-          >
-            {isAuthenticated ? 'Start Earning' : 'Connect Wallet'}
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
+          {isAuthenticated ? (
+            <Link to="/feed">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="px-8 py-4 bg-white text-movement-600 hover:bg-gray-100"
+              >
+                Start Earning
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+            </Link>
+          ) : (
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={handleGetStarted}
+              loading={isLoading}
+              className="px-8 py-4 bg-white text-movement-600 hover:bg-gray-100"
+            >
+              Connect Wallet
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          )}
         </div>
       </motion.section>
     </div>

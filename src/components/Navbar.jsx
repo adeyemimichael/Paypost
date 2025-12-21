@@ -1,11 +1,13 @@
 import { motion } from 'framer-motion';
-import { Wallet, LogOut, User } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Wallet, LogOut, User, Home, FileText, Users } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { formatAddress } from '../utils/formatters';
 import Button from './Button';
 
 const Navbar = () => {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const location = useLocation();
 
   const handleConnect = async () => {
     try {
@@ -23,6 +25,30 @@ const Navbar = () => {
     }
   };
 
+  const navLinks = [
+    {
+      to: '/',
+      label: 'Home',
+      icon: <Home className="w-4 h-4" />
+    },
+    {
+      to: '/feed',
+      label: 'Feed',
+      icon: <FileText className="w-4 h-4" />
+    },
+    {
+      to: '/creators',
+      label: 'Creators',
+      icon: <Users className="w-4 h-4" />
+    }
+  ];
+
+  const isActiveLink = (path) => {
+    if (path === '/' && location.pathname === '/') return true;
+    if (path !== '/' && location.pathname.startsWith(path)) return true;
+    return false;
+  };
+
   return (
     <motion.nav 
       initial={{ y: -20, opacity: 0 }}
@@ -36,23 +62,30 @@ const Navbar = () => {
             className="flex items-center"
             whileHover={{ scale: 1.05 }}
           >
-            <div className="flex-shrink-0">
+            <Link to="/" className="flex-shrink-0">
               <h1 className="text-2xl font-bold text-movement-600">PayPost</h1>
-            </div>
+            </Link>
           </motion.div>
 
           {/* Navigation Links */}
           <div className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-4">
-              <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                Feed
-              </a>
-              <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                Creators
-              </a>
-              <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                About
-              </a>
+              {navLinks.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`
+                    flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors
+                    ${isActiveLink(link.to)
+                      ? 'bg-movement-100 text-movement-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }
+                  `}
+                >
+                  {link.icon}
+                  <span>{link.label}</span>
+                </Link>
+              ))}
             </div>
           </div>
 

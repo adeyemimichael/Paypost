@@ -7,6 +7,8 @@ import { privyService } from './services/privyService';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import FeedPage from './pages/FeedPage';
+import CreatorsPage from './pages/CreatorsPage';
+import CreatorApplicationPage from './pages/CreatorApplicationPage';
 import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
@@ -37,6 +39,8 @@ const AppContent = () => {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/feed" element={<FeedPage />} />
+            <Route path="/creators" element={<CreatorsPage />} />
+            <Route path="/apply-creator" element={<CreatorApplicationPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
