@@ -4,6 +4,7 @@ import { Wallet, LogOut, User, Home, FileText, Users } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { formatAddress } from '../utils/formatters';
 import Button from './Button';
+import ThemeToggle from './ThemeToggle';
 
 const Navbar = () => {
   const { ready, authenticated, user, login, logout } = usePrivy();
@@ -53,7 +54,7 @@ const Navbar = () => {
     <motion.nav 
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="bg-white border-b border-gray-200 sticky top-0 z-50"
+      className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 transition-colors duration-300"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
@@ -63,7 +64,7 @@ const Navbar = () => {
             whileHover={{ scale: 1.05 }}
           >
             <Link to="/" className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-movement-600">PayPost</h1>
+              <h1 className="text-2xl font-bold text-movement-600 dark:text-movement-400">PayPost</h1>
             </Link>
           </motion.div>
 
@@ -77,8 +78,8 @@ const Navbar = () => {
                   className={`
                     flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors
                     ${isActiveLink(link.to)
-                      ? 'bg-movement-100 text-movement-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      ? 'bg-movement-100 dark:bg-movement-900 text-movement-700 dark:text-movement-300'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
                     }
                   `}
                 >
@@ -91,11 +92,13 @@ const Navbar = () => {
 
           {/* Wallet Connection */}
           <div className="flex items-center space-x-4">
+            <ThemeToggle />
+            
             {ready && authenticated ? (
               <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2">
-                  <User className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">
+                <div className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <User className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     {formatAddress(user?.wallet?.address)}
                   </span>
                 </div>
