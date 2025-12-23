@@ -8,7 +8,7 @@ import EarningsDashboard from '../components/EarningsDashboard';
 import Button from '../components/Button';
 
 const FeedPage = () => {
-  const { isAuthenticated, login, isLoading } = useUserStore();
+  const { isAuthenticated, isCreator, login, isLoading } = useUserStore();
 
   useEffect(() => {
     // Initialize Movement service when component mounts
@@ -23,17 +23,30 @@ const FeedPage = () => {
     }
   };
 
+  const getPageTitle = () => {
+    if (isCreator()) {
+      return "My Surveys & Analytics";
+    }
+    return "Earn MOVE Tokens";
+  };
+
+  const getPageDescription = () => {
+    if (isCreator()) {
+      return "Manage your surveys, track responses, and analyze results from your research projects.";
+    }
+    return "Complete surveys and polls to earn MOVE tokens instantly. Share your opinions and get rewarded!";
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <motion.div {...fadeIn} className="text-center mb-12">
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Content & Rewards Hub
+            {getPageTitle()}
           </h1>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Earn MOVE tokens by completing surveys, or unlock premium articles and research. 
-            Your one-stop destination for Web3 insights and rewards!
+            {getPageDescription()}
           </p>
         </motion.div>
 
@@ -49,18 +62,18 @@ const FeedPage = () => {
           >
             <div className="max-w-md mx-auto">
               <h3 className="text-xl font-semibold text-gray-900 mb-3">
-                Unlock Full Experience
+                Start Earning MOVE Tokens
               </h3>
               <p className="text-gray-600 mb-6">
-                Connect your wallet to earn from surveys and unlock premium content. 
-                No seed phrases required - we use secure embedded wallets.
+                Connect your wallet to participate in surveys and earn rewards instantly. 
+                Choose your role: Survey Participant or Creator.
               </p>
               <Button
                 onClick={handleConnect}
                 loading={isLoading}
                 size="lg"
               >
-                Connect Wallet to Continue
+                Choose Role & Connect Wallet
               </Button>
             </div>
           </motion.div>

@@ -4,19 +4,25 @@ import { PrivyProvider, usePrivy } from '@privy-io/react-auth';
 import { ToastContainer } from 'react-toastify';
 import { useUserStore } from './stores/userStore';
 import { privyService } from './services/privyService';
+import { movementService } from './services/movementService';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import FeedPage from './pages/FeedPage';
 import CreatorsPage from './pages/CreatorsPage';
 import CreatorApplicationPage from './pages/CreatorApplicationPage';
+import CreateSurveyPage from './pages/CreateSurveyPage';
 import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
 const AppContent = () => {
-  const { setUser } = useUserStore();
+  const { setUser, loadUserRole } = useUserStore();
   const privy = usePrivy();
 
   useEffect(() => {
+    // Initialize services
+    movementService.initialize();
+    loadUserRole();
+    
     // Initialize Privy service when component mounts
     if (privy) {
       privyService.initialize(privy);
@@ -29,7 +35,7 @@ const AppContent = () => {
         });
       }
     }
-  }, [privy?.ready, privy?.authenticated, privy?.user?.id]); // Fixed dependencies
+  }, [privy?.ready, privy?.authenticated, privy?.user?.id, loadUserRole]);
 
   return (
     <Router>
@@ -41,6 +47,7 @@ const AppContent = () => {
             <Route path="/feed" element={<FeedPage />} />
             <Route path="/creators" element={<CreatorsPage />} />
             <Route path="/apply-creator" element={<CreatorApplicationPage />} />
+            <Route path="/create-survey" element={<CreateSurveyPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

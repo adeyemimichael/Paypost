@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { 
   ArrowRight, 
   Zap, 
@@ -17,17 +18,15 @@ import {
 import { usePrivy } from '@privy-io/react-auth';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
+import RoleSelectionModal from '../components/RoleSelectionModal';
 
 const Home = () => {
-  const { ready, authenticated, login } = usePrivy();
+  const { ready, authenticated } = usePrivy();
+  const [showRoleModal, setShowRoleModal] = useState(false);
 
-  const handleGetStarted = async () => {
+  const handleGetStarted = () => {
     if (!authenticated) {
-      try {
-        await login();
-      } catch (error) {
-        console.error('Failed to connect wallet:', error);
-      }
+      setShowRoleModal(true);
     }
   };
 
@@ -177,7 +176,7 @@ const Home = () => {
                   className="px-10 py-4 text-lg bg-gradient-to-r from-movement-500 to-movement-600 hover:from-movement-600 hover:to-movement-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
                 >
                   <Zap className="w-5 h-5 mr-2" />
-                  Get Started Free
+                  Choose Role & Start
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               )}
@@ -354,6 +353,12 @@ const Home = () => {
           </div>
         </div>
       </motion.section>
+
+      {/* Role Selection Modal */}
+      <RoleSelectionModal 
+        isOpen={showRoleModal} 
+        onClose={() => setShowRoleModal(false)} 
+      />
     </div>
   );
 };

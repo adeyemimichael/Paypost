@@ -1,16 +1,19 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Wallet, LogOut, User } from 'lucide-react';
+import { Wallet, LogOut, User, Plus } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useUserStore } from '../stores/userStore';
 import { formatAddress } from '../utils/formatters';
 import Button from './Button';
 import ThemeToggle from './ThemeToggle';
 
 const Navbar = () => {
-  const { ready, authenticated, user, login, logout } = usePrivy();
+  const { ready, authenticated, logout } = usePrivy();
+  const { user, userRole, isCreator, login } = useUserStore();
 
   const handleConnect = async () => {
     try {
+      // This will trigger the role selection modal
       await login();
     } catch (error) {
       console.error('Failed to connect wallet:', error);
@@ -47,7 +50,7 @@ const Navbar = () => {
           <div className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-4">
               <Link to="/feed" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
-                Feed
+                {isCreator() ? 'My Surveys' : 'Earn Rewards'}
               </Link>
               <Link to="/creators" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
                 Creators
@@ -55,6 +58,12 @@ const Navbar = () => {
               <Link to="/about" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
                 About
               </Link>
+              {isCreator() && (
+                <Link to="/create-survey" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Create Survey
+                </Link>
+              )}
             </div>
           </div>
 
@@ -69,6 +78,17 @@ const Navbar = () => {
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     {formatAddress(user?.wallet?.address)}
                   </span>
+                  {userRole && (
+                    <span className={`
+                      text-xs px-2 py-1 rounded-full font-medium
+                      ${userRole === 'creator' 
+                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' 
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                      }
+                    `}>
+                      {userRole === 'creator' ? 'Creator' : 'Participant'}
+                    </span>
+                  )}
                 </div>
                 <Button
                   variant="outline"
