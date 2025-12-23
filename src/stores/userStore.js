@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { privyService } from '../services/privyService';
+import { mockAuthService } from '../services/mockAuthService';
 
 export const useUserStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
   userRole: null, // 'creator' or 'reader'
+  useMockAuth: false, // Flag to use mock auth when Privy fails
   
   setUser: (user) => {
     const currentUser = get().user;
@@ -34,11 +36,33 @@ export const useUserStore = create((set, get) => ({
   
   setLoading: (isLoading) => set({ isLoading }),
   
+  enableMockAuth: () => {
+    set({ useMockAuth: true });
+  },
+  
   login: async (role = 'reader') => {
     set({ isLoading: true });
     try {
-      const wallet = await privyService.connectWallet();
-      const user = privyService.getUser();
+      const { useMockAuth } = get();
+      let wallet, user;
+      
+      if (useMockAuth) {
+        // Use mock authentication
+        wallet = await mockAuthService.connectWallet();
+        user = mockAuthService.getUser();
+      } else {
+        // Try Privy first
+        try {
+          wallet = await privyService.connectWallet();
+          user = privyService.getUser();
+        } catch (privyError) {
+          console.warn('Privy failed, falling back to mock auth:', privyError);
+          set({ useMockAuth: true });
+          wallet = await mockAuthService.connectWallet();
+          user = mockAuthService.getUser();
+        }
+      }
+      
       set({ 
         user: { ...user, wallet }, 
         isAuthenticated: true, 
@@ -59,7 +83,14 @@ export const useUserStore = create((set, get) => ({
   logout: async () => {
     set({ isLoading: true });
     try {
-      await privyService.disconnectWallet();
+      const { useMockAuth } = get();
+      
+      if (useMockAuth) {
+        await mockAuthService.disconnectWallet();
+      } else {
+        await privyService.disconnectWallet();
+      }
+      
       set({ 
         user: null, 
         isAuthenticated: false, 
@@ -74,8 +105,19 @@ export const useUserStore = create((set, get) => ({
   },
   
   getWalletAddress: () => {
-    const { user } = get();
+    const { user, useMockAuth } = get();
+    if (useMockAuth) {
+      return mockAuthService.getWalletAddress();
+    }
     return user?.wallet?.address || null;
+  },
+  
+  getBalance: () => {
+    const { useMockAuth } = get();
+    if (useMockAuth) {
+      return mockAuthService.getBalance();
+    }
+    return 0; // Would get from Privy in real implementation
   },
   
   isCreator: () => {

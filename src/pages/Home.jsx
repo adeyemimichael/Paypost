@@ -136,7 +136,7 @@ const Home = () => {
             <motion.h1 
               {...slideUp}
               transition={{ delay: 0.1 }}
-              className="text-5xl sm:text-7xl font-bold text-gray-900 dark:text-white mb-8 leading-tight"
+              className="text-4xl sm:text-6xl lg:text-7xl font-bold text-gray-900 dark:text-white mb-8 leading-tight"
             >
               Turn Your
               <span className="bg-gradient-to-r from-movement-600 via-purple-600 to-pink-600 bg-clip-text text-transparent block animate-pulse-slow">
@@ -148,11 +148,40 @@ const Home = () => {
             <motion.p 
               {...slideUp}
               transition={{ delay: 0.2 }}
-              className="text-xl sm:text-2xl text-gray-600 dark:text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed"
+              className="text-lg sm:text-xl lg:text-2xl text-gray-600 dark:text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed"
             >
               Join the Web3 revolution where your insights earn <span className="font-semibold text-movement-600 dark:text-movement-400">MOVE tokens</span> instantly. 
               Share your thoughts, shape the future, and get rewarded for your valuable opinions.
             </motion.p>
+
+            {/* Value Propositions */}
+            <motion.div 
+              {...slideUp}
+              transition={{ delay: 0.25 }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-4xl mx-auto"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Instant Rewards</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Earn 0.1-0.5 MOVE per survey, paid immediately</p>
+              </div>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">No Crypto Knowledge</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Email login creates secure wallet automatically</p>
+              </div>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <DollarSign className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Real Value</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Use tokens anywhere, no minimum withdrawal</p>
+              </div>
+            </motion.div>
             
             {/* CTA Buttons */}
             <motion.div 

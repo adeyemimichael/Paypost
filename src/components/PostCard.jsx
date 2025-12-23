@@ -1,6 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Gift, CheckCircle, Heart, Clock, Users, Timer, Lock, Unlock, BookOpen } from 'lucide-react';
+import { 
+  Gift, 
+  CheckCircle, 
+  Heart, 
+  Clock, 
+  Users, 
+  Timer, 
+  Lock, 
+  Unlock, 
+  BookOpen,
+  BarChart3,
+  Eye,
+  TrendingUp,
+  DollarSign
+} from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
 import { formatPrice, formatAddress, formatTimeAgo, truncateText } from '../utils/formatters';
@@ -11,7 +25,7 @@ import TipModal from './TipModal';
 import SurveyModal from './SurveyModal';
 
 const PostCard = ({ post, onComplete }) => {
-  const { isAuthenticated, getWalletAddress } = useUserStore();
+  const { isAuthenticated, getWalletAddress, isCreator } = useUserStore();
   const { isSurveyCompleted, isPostUnlocked, checkSurveyCompletion, checkPostAccess, unlockPost, isLoading } = usePostStore();
   const [showTipModal, setShowTipModal] = useState(false);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
@@ -22,10 +36,11 @@ const PostCard = ({ post, onComplete }) => {
   const walletAddress = getWalletAddress();
   const isCompleted = isSurveyCompleted(post.id) || hasCompleted;
   const isUnlocked = isPostUnlocked(post.id) || hasAccess || !post.isPremium;
+  const isOwnPost = walletAddress && post.authorAddress === walletAddress;
 
   useEffect(() => {
     const checkStatus = async () => {
-      if (walletAddress) {
+      if (walletAddress && !isCreator()) {
         setChecking(true);
         
         if (post.type === 'survey' || post.type === 'poll') {
@@ -41,7 +56,7 @@ const PostCard = ({ post, onComplete }) => {
     };
 
     checkStatus();
-  }, [post.id, post.type, post.isPremium, walletAddress, checkSurveyCompletion, checkPostAccess]);
+  }, [post.id, post.type, post.isPremium, walletAddress, checkSurveyCompletion, checkPostAccess, isCreator]);
 
   const handleStartSurvey = () => {
     if (!isAuthenticated) {
@@ -74,6 +89,140 @@ const PostCard = ({ post, onComplete }) => {
     setShowTipModal(true);
   };
 
+  const calculateEarnings = () => {
+    if (post.type === 'survey' || post.type === 'poll') {
+      return post.reward * post.responses;
+    }
+    return 0;
+  };
+
+  const getCompletionRate = () => {
+    if (post.type === 'survey' || post.type === 'poll') {
+      return Math.round((post.responses / post.maxResponses) * 100);
+    }
+    return 0;
+  };
+
+  // Creator View - Show Analytics
+  if (isCreator() && isOwnPost) {
+    return (
+      <motion.div {...fadeIn}>
+        <Card className="mb-6 border-l-4 border-l-purple-500">
+          {/* Creator Header */}
+          <div className="p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <div className="flex items-center mb-2">
+                  <h3 className="text-xl font-semibold text-gray-900 mr-3">
+                    {post.title}
+                  </h3>
+                  <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs font-medium">
+                    Your {post.type === 'survey' ? 'Survey' : post.type === 'poll' ? 'Poll' : 'Post'}
+                  </span>
+                </div>
+                <div className="flex items-center text-sm text-gray-500 space-x-4">
+                  <span className="flex items-center">
+                    <Clock className="w-4 h-4 mr-1" />
+                    {formatTimeAgo(post.timestamp)}
+                  </span>
+                  {post.category && (
+                    <span className="bg-gray-100 px-2 py-1 rounded text-xs">
+                      {post.category}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Analytics for Surveys/Polls */}
+            {(post.type === 'survey' || post.type === 'poll') && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600 font-medium">Responses</p>
+                      <p className="text-2xl font-bold text-blue-900">{post.responses}</p>
+                    </div>
+                    <Users className="w-8 h-8 text-blue-500" />
+                  </div>
+                </div>
+                
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-green-600 font-medium">Completion</p>
+                      <p className="text-2xl font-bold text-green-900">{getCompletionRate()}%</p>
+                    </div>
+                    <TrendingUp className="w-8 h-8 text-green-500" />
+                  </div>
+                </div>
+                
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600 font-medium">Paid Out</p>
+                      <p className="text-2xl font-bold text-purple-900">{formatPrice(calculateEarnings())}</p>
+                    </div>
+                    <DollarSign className="w-8 h-8 text-purple-500" />
+                  </div>
+                </div>
+                
+                <div className="bg-orange-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-orange-600 font-medium">Status</p>
+                      <p className="text-sm font-bold text-orange-900">
+                        {post.isActive ? 'Active' : 'Closed'}
+                      </p>
+                    </div>
+                    <BarChart3 className="w-8 h-8 text-orange-500" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Content Preview */}
+            <div className="mb-4">
+              <p className="text-gray-700 leading-relaxed">
+                {truncateText(post.preview || post.description, 150)}
+              </p>
+            </div>
+
+            {/* Creator Actions */}
+            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+              <div className="flex items-center space-x-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  View Analytics
+                </Button>
+                
+                {(post.type === 'survey' || post.type === 'poll') && post.isActive && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Preview Survey
+                  </Button>
+                )}
+              </div>
+
+              <div className="text-sm text-gray-500">
+                Created {formatTimeAgo(post.timestamp)}
+              </div>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+    );
+  }
+
+  // Participant View - Show Interactive Content
   return (
     <>
       <motion.div {...fadeIn}>
@@ -226,10 +375,10 @@ const PostCard = ({ post, onComplete }) => {
               )}
             </div>
 
-            {/* Actions */}
+            {/* Actions - Only show interactive buttons for participants */}
             <div className="flex items-center justify-between pt-4 border-t border-gray-200">
               <div className="flex items-center space-x-3">
-                {(post.type === 'survey' || post.type === 'poll') ? (
+                {!isCreator() && (post.type === 'survey' || post.type === 'poll') ? (
                   !isCompleted && post.isActive && post.responses < post.maxResponses ? (
                     <Button
                       onClick={handleStartSurvey}
@@ -251,36 +400,41 @@ const PostCard = ({ post, onComplete }) => {
                       Survey Closed
                     </div>
                   )
+                ) : !isCreator() && post.isPremium && !isUnlocked ? (
+                  <Button
+                    onClick={handleUnlockPost}
+                    loading={isLoading || checking}
+                    disabled={!isAuthenticated}
+                    className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                  >
+                    <Unlock className="w-4 h-4 mr-2" />
+                    {isAuthenticated ? 'Unlock Post' : 'Connect to Unlock'}
+                  </Button>
+                ) : !isCreator() ? (
+                  <div className="flex items-center text-green-600 text-sm font-medium">
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    {post.isPremium ? 'Unlocked' : 'Free Access'}
+                  </div>
                 ) : (
-                  post.isPremium && !isUnlocked ? (
-                    <Button
-                      onClick={handleUnlockPost}
-                      loading={isLoading || checking}
-                      disabled={!isAuthenticated}
-                      className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-                    >
-                      <Unlock className="w-4 h-4 mr-2" />
-                      {isAuthenticated ? 'Unlock Post' : 'Connect to Unlock'}
-                    </Button>
-                  ) : (
-                    <div className="flex items-center text-green-600 text-sm font-medium">
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      {post.isPremium ? 'Unlocked' : 'Free Access'}
-                    </div>
-                  )
+                  <div className="flex items-center text-gray-500 text-sm font-medium">
+                    <Eye className="w-4 h-4 mr-1" />
+                    View Only (Creator Mode)
+                  </div>
                 )}
               </div>
 
               <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTip}
-                  disabled={!isAuthenticated}
-                >
-                  <Heart className="w-4 h-4 mr-1" />
-                  Tip
-                </Button>
+                {!isOwnPost && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTip}
+                    disabled={!isAuthenticated}
+                  >
+                    <Heart className="w-4 h-4 mr-1" />
+                    Tip
+                  </Button>
+                )}
                 <span className="text-sm text-gray-500">
                   {formatAddress(post.authorAddress)}
                 </span>
@@ -290,20 +444,24 @@ const PostCard = ({ post, onComplete }) => {
         </Card>
       </motion.div>
 
-      {/* Modals */}
-      <TipModal
-        isOpen={showTipModal}
-        onClose={() => setShowTipModal(false)}
-        creatorAddress={post.authorAddress}
-        creatorName={post.author}
-      />
-      
-      {(post.type === 'survey' || post.type === 'poll') && (
-        <SurveyModal
-          isOpen={showSurveyModal}
-          onClose={handleSurveyComplete}
-          post={post}
-        />
+      {/* Modals - Only for participants */}
+      {!isCreator() && (
+        <>
+          <TipModal
+            isOpen={showTipModal}
+            onClose={() => setShowTipModal(false)}
+            creatorAddress={post.authorAddress}
+            creatorName={post.author}
+          />
+          
+          {(post.type === 'survey' || post.type === 'poll') && (
+            <SurveyModal
+              isOpen={showSurveyModal}
+              onClose={handleSurveyComplete}
+              post={post}
+            />
+          )}
+        </>
       )}
     </>
   );
