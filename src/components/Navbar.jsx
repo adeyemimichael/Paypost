@@ -133,9 +133,10 @@ const Navbar = () => {
               <Button
                 onClick={handleConnect}
                 disabled={!ready}
+                className="flex items-center justify-center"
               >
-                <Wallet className="w-4 h-4 mr-2" />
-                {ready ? 'Connect Wallet' : 'Loading...'}
+                <Wallet className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span>{ready ? 'Connect Wallet' : 'Loading...'}</span>
               </Button>
             )}
           </div>
@@ -221,10 +222,10 @@ const Navbar = () => {
                       <Button
                         onClick={handleConnect}
                         disabled={!ready}
-                        className="w-full"
+                        className="w-full flex items-center justify-center"
                       >
-                        <Wallet className="w-4 h-4 mr-2" />
-                        {ready ? 'Connect Wallet' : 'Loading...'}
+                        <Wallet className="w-4 h-4 mr-2 flex-shrink-0" />
+                        <span>{ready ? 'Connect Wallet' : 'Loading...'}</span>
                       </Button>
                     </div>
                   )}

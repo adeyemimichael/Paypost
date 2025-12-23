@@ -187,14 +187,14 @@ const Home = () => {
             <motion.div 
               {...slideUp}
               transition={{ delay: 0.3 }}
-              className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16"
+              className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16"
             >
               {authenticated ? (
-                <Link to="/feed">
-                  <Button size="lg" className="px-10 py-4 text-lg bg-gradient-to-r from-movement-500 to-movement-600 hover:from-movement-600 hover:to-movement-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200">
-                    <Sparkles className="w-5 h-5 mr-2" />
-                    Start Earning Now
-                    <ArrowRight className="w-5 h-5 ml-2" />
+                <Link to="/feed" className="inline-block">
+                  <Button size="lg" className="w-full sm:w-auto px-10 py-4 text-lg bg-gradient-to-r from-movement-500 to-movement-600 hover:from-movement-600 hover:to-movement-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 mr-2 flex-shrink-0" />
+                    <span>Start Earning Now</span>
+                    <ArrowRight className="w-5 h-5 ml-2 flex-shrink-0" />
                   </Button>
                 </Link>
               ) : (
@@ -202,21 +202,21 @@ const Home = () => {
                   size="lg"
                   onClick={handleGetStarted}
                   disabled={!ready}
-                  className="px-10 py-4 text-lg bg-gradient-to-r from-movement-500 to-movement-600 hover:from-movement-600 hover:to-movement-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                  className="w-full sm:w-auto px-10 py-4 text-lg bg-gradient-to-r from-movement-500 to-movement-600 hover:from-movement-600 hover:to-movement-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center"
                 >
-                  <Zap className="w-5 h-5 mr-2" />
-                  Choose Role & Start
-                  <ArrowRight className="w-5 h-5 ml-2" />
+                  <Zap className="w-5 h-5 mr-2 flex-shrink-0" />
+                  <span>Choose Role & Start</span>
+                  <ArrowRight className="w-5 h-5 ml-2 flex-shrink-0" />
                 </Button>
               )}
               
               <Button
                 variant="outline"
                 size="lg"
-                className="px-10 py-4 text-lg border-2 border-gray-300 dark:border-gray-600 hover:border-movement-500 dark:hover:border-movement-400 group"
+                className="w-full sm:w-auto px-10 py-4 text-lg border-2 border-gray-300 dark:border-gray-600 hover:border-movement-500 dark:hover:border-movement-400 group flex items-center justify-center"
               >
-                <Shield className="w-5 h-5 mr-2 group-hover:text-movement-500" />
-                Learn More
+                <Shield className="w-5 h-5 mr-2 group-hover:text-movement-500 flex-shrink-0" />
+                <span>Learn More</span>
               </Button>
             </motion.div>
 
