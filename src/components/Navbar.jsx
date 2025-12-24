@@ -124,9 +124,10 @@ const Navbar = () => {
                   variant="outline"
                   size="sm"
                   onClick={handleDisconnect}
+                  className="flex items-center justify-center"
                 >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Disconnect
+                  <LogOut className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span>Disconnect</span>
                 </Button>
               </div>
             ) : (
@@ -210,10 +211,10 @@ const Navbar = () => {
                           variant="outline"
                           size="sm"
                           onClick={handleDisconnect}
-                          className="w-full"
+                          className="w-full flex items-center justify-center"
                         >
-                          <LogOut className="w-4 h-4 mr-2" />
-                          Disconnect Wallet
+                          <LogOut className="w-4 h-4 mr-2 flex-shrink-0" />
+                          <span>Disconnect Wallet</span>
                         </Button>
                       </div>
                     </div>
