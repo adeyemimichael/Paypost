@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { PrivyProvider, usePrivy } from '@privy-io/react-auth';
 import { ToastContainer } from 'react-toastify';
 import { useUserStore } from './stores/userStore';
+import { usePostStore } from './stores/postStore';
 import { privyService } from './services/privyService';
 import { movementService } from './services/movementService';
 import Navbar from './components/Navbar';
@@ -16,12 +17,16 @@ import './index.css';
 
 const AppContent = () => {
   const { setUser, loadUserRole } = useUserStore();
+  const { initialize: initializePostStore } = usePostStore();
   const privy = usePrivy();
 
   useEffect(() => {
     // Initialize services
     movementService.initialize();
     loadUserRole();
+    
+    // Initialize post store (will check Supabase availability)
+    initializePostStore();
     
     // Initialize Privy service when component mounts
     if (privy) {
@@ -35,7 +40,7 @@ const AppContent = () => {
         });
       }
     }
-  }, [privy?.ready, privy?.authenticated, privy?.user?.id, loadUserRole]);
+  }, [privy?.ready, privy?.authenticated, privy?.user?.id, loadUserRole, initializePostStore]);
 
   return (
     <Router>

@@ -226,7 +226,7 @@ const Home = () => {
               transition={{ delay: 0.4 }}
               className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto"
             >
-              {stats.map((stat, index) => (
+              {/* {stats.map((stat, index) => (
                 <motion.div
                   key={index}
                   {...slideUp}
@@ -246,7 +246,7 @@ const Home = () => {
                     {stat.label}
                   </div>
                 </motion.div>
-              ))}
+              ))} */}
             </motion.div>
           </div>
         </div>

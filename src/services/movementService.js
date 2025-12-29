@@ -328,7 +328,7 @@ class MovementService {
         } else {
           reject(new Error('Transaction simulation failed'));
         }
-      }, 2000);
+      }, 1000); // Reduced delay for better UX
     });
   }
 

@@ -1,6 +1,7 @@
 module PayPost::ContentPlatform {
     use std::signer;
     use std::vector;
+    use std::option;
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::event;

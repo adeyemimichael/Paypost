@@ -92,7 +92,7 @@ movement move compile
 # Deploy to testnet
 movement move publish \
   --package-dir . \
-  --named-addresses PayPost=<your-wallet-address>
+  --named-addresses PayPost=0xa74c3b75410a0681f854cfe2b869a3cd6b959d7dbe551aef4781c6a3ff3aa8dd
 
 # Copy the deployed contract address
 # Update .env file:
