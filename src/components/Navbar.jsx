@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Wallet, LogOut, User, Plus, Menu, X } from 'lucide-react';
@@ -7,19 +7,32 @@ import { useUserStore } from '../stores/userStore';
 import { formatAddress } from '../utils/formatters';
 import Button from './Button';
 import ThemeToggle from './ThemeToggle';
+import WalletBalance from './WalletBalance';
+import RoleSelectionModal from './RoleSelectionModal';
 
 const Navbar = () => {
   const { ready, authenticated, logout } = usePrivy();
   const { user, userRole, isCreator, login } = useUserStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const handleConnect = async () => {
+    if (isConnecting) return; // Prevent multiple clicks
+    
     try {
-      // This will trigger the role selection modal
-      await login();
+      setIsConnecting(true);
+      setShowRoleModal(true);
     } catch (error) {
-      console.error('Failed to connect wallet:', error);
+      console.error('Failed to show role modal:', error);
+    } finally {
+      setIsConnecting(false);
     }
+  };
+
+  const handleRoleModalClose = () => {
+    setShowRoleModal(false);
+    setIsConnecting(false);
   };
 
   const handleDisconnect = async () => {
@@ -51,8 +64,18 @@ const Navbar = () => {
       show: true
     },
     {
+      to: "/how-it-works",
+      label: 'How It Works',
+      show: true
+    },
+    {
       to: "/about",
       label: 'About',
+      show: true
+    },
+    {
+      to: "/faq",
+      label: 'FAQ',
       show: true
     },
     {
@@ -103,6 +126,9 @@ const Navbar = () => {
             
             {ready && authenticated ? (
               <div className="flex items-center space-x-3">
+                {/* Wallet Balance */}
+                <WalletBalance size="sm" showLabel={false} />
+                
                 <div className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
                   <User className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -133,11 +159,12 @@ const Navbar = () => {
             ) : (
               <Button
                 onClick={handleConnect}
-                disabled={!ready}
+                disabled={!ready || isConnecting}
+                loading={isConnecting}
                 className="flex items-center justify-center"
               >
                 <Wallet className="w-4 h-4 mr-2 flex-shrink-0" />
-                <span>{ready ? 'Connect Wallet' : 'Loading...'}</span>
+                <span>{!ready ? 'Loading...' : isConnecting ? 'Connecting...' : 'Connect Wallet'}</span>
               </Button>
             )}
           </div>
@@ -185,6 +212,11 @@ const Navbar = () => {
                 <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                   {ready && authenticated ? (
                     <div className="space-y-3">
+                      {/* Wallet Balance */}
+                      <div className="px-3">
+                        <WalletBalance size="sm" className="w-full justify-center" />
+                      </div>
+                      
                       <div className="px-3 py-2">
                         <div className="flex items-center space-x-2 text-sm">
                           <User className="w-4 h-4 text-gray-600 dark:text-gray-300" />
@@ -222,11 +254,12 @@ const Navbar = () => {
                     <div className="px-3">
                       <Button
                         onClick={handleConnect}
-                        disabled={!ready}
+                        disabled={!ready || isConnecting}
+                        loading={isConnecting}
                         className="w-full flex items-center justify-center"
                       >
                         <Wallet className="w-4 h-4 mr-2 flex-shrink-0" />
-                        <span>{ready ? 'Connect Wallet' : 'Loading...'}</span>
+                        <span>{!ready ? 'Loading...' : isConnecting ? 'Connecting...' : 'Connect Wallet'}</span>
                       </Button>
                     </div>
                   )}
@@ -236,6 +269,12 @@ const Navbar = () => {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Role Selection Modal */}
+      <RoleSelectionModal 
+        isOpen={showRoleModal} 
+        onClose={handleRoleModalClose} 
+      />
     </motion.nav>
   );
 };

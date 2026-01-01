@@ -5,13 +5,18 @@ import { ToastContainer } from 'react-toastify';
 import { useUserStore } from './stores/userStore';
 import { usePostStore } from './stores/postStore';
 import { privyService } from './services/privyService';
-import { movementService } from './services/movementService';
+import { realMovementService } from './services/realMovementService';
 import Navbar from './components/Navbar';
+import TransactionModeToggle from './components/TransactionModeToggle';
+import WalletDebugInfo from './components/WalletDebugInfo';
 import Home from './pages/Home';
 import FeedPage from './pages/FeedPage';
 import CreatorsPage from './pages/CreatorsPage';
 import CreatorApplicationPage from './pages/CreatorApplicationPage';
 import CreateSurveyPage from './pages/CreateSurveyPage';
+import AboutPage from './pages/AboutPage';
+import HowItWorksPage from './pages/HowItWorksPage';
+import FAQPage from './pages/FAQPage';
 import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
@@ -22,7 +27,7 @@ const AppContent = () => {
 
   useEffect(() => {
     // Initialize services
-    movementService.initialize();
+    realMovementService.initialize();
     loadUserRole();
     
     // Initialize post store (will check Supabase availability)
@@ -53,6 +58,9 @@ const AppContent = () => {
             <Route path="/creators" element={<CreatorsPage />} />
             <Route path="/apply-creator" element={<CreatorApplicationPage />} />
             <Route path="/create-survey" element={<CreateSurveyPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/how-it-works" element={<HowItWorksPage />} />
+            <Route path="/faq" element={<FAQPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -69,6 +77,12 @@ const AppContent = () => {
           pauseOnHover
           theme="light"
         />
+        
+        {/* Transaction Mode Toggle - Only show in development */}
+        {import.meta.env.DEV && <TransactionModeToggle />}
+        
+        {/* Wallet Debug Info - Only show in development */}
+        {import.meta.env.DEV && <WalletDebugInfo />}
       </div>
     </Router>
   );
@@ -91,49 +105,37 @@ const App = () => {
         },
         supportedChains: [
           {
-            id: 1,
-            name: 'Ethereum',
-            network: 'homestead',
+            id: 250,
+            name: 'Movement Testnet',
+            network: 'movement-testnet',
             nativeCurrency: {
-              name: 'Ether',
-              symbol: 'ETH',
-              decimals: 18,
+              name: 'MOVE',
+              symbol: 'MOVE',
+              decimals: 8,
             },
             rpcUrls: {
               default: {
-                http: ['https://eth-mainnet.g.alchemy.com/v2/demo'],
+                http: ['https://testnet.movementnetwork.xyz/v1'],
               },
             },
             blockExplorers: {
               default: {
-                name: 'Etherscan',
-                url: 'https://etherscan.io',
-              },
-            },
-          },
-          {
-            id: 11155111,
-            name: 'Sepolia',
-            network: 'sepolia',
-            nativeCurrency: {
-              name: 'Sepolia Ether',
-              symbol: 'SEP',
-              decimals: 18,
-            },
-            rpcUrls: {
-              default: {
-                http: ['https://eth-sepolia.g.alchemy.com/v2/demo'],
-              },
-            },
-            blockExplorers: {
-              default: {
-                name: 'Etherscan',
-                url: 'https://sepolia.etherscan.io',
+                name: 'Movement Explorer',
+                url: 'https://explorer.movementnetwork.xyz',
               },
             },
             testnet: true,
           },
         ],
+        // Remove Solana configuration to fix warnings
+        externalWallets: {
+          coinbaseWallet: {
+            // Only include supported chains
+            connectionOptions: {
+              appName: 'PayPost',
+            },
+          },
+        },
       }}
     >
       <AppContent />

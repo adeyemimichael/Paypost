@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { privyService } from '../services/privyService';
 import { mockAuthService } from '../services/mockAuthService';
+import { notify } from '../utils/notify';
 
 export const useUserStore = create((set, get) => ({
   user: null,
@@ -8,6 +9,7 @@ export const useUserStore = create((set, get) => ({
   isLoading: false,
   userRole: null, // 'creator' or 'reader'
   useMockAuth: false, // Flag to use mock auth when Privy fails
+  balance: 0, // User's MOVE token balance
   
   setUser: (user) => {
     const currentUser = get().user;
@@ -36,13 +38,19 @@ export const useUserStore = create((set, get) => ({
   
   setLoading: (isLoading) => set({ isLoading }),
   
+  setBalance: (balance) => set({ balance }),
+  
   enableMockAuth: () => {
     set({ useMockAuth: true });
   },
   
   login: async (role = 'reader') => {
     set({ isLoading: true });
+    
+    let toastId;
     try {
+      toastId = notify.loading('Connecting wallet...');
+      
       const { useMockAuth } = get();
       let wallet, user;
       
@@ -63,26 +71,69 @@ export const useUserStore = create((set, get) => ({
         }
       }
       
+      // Try to create/get user in Supabase
+      let dbUser = null;
+      try {
+        const { supabaseService } = await import('../services/supabaseService');
+        dbUser = await supabaseService.getOrCreateUser(
+          wallet.address, 
+          user.email, 
+          role
+        );
+      } catch (dbError) {
+        console.warn('Failed to create user in database:', dbError);
+        // Continue without database user
+      }
+      
       set({ 
-        user: { ...user, wallet }, 
+        user: { 
+          ...user, 
+          wallet,
+          id: dbUser?.id || user.id,
+          dbUser 
+        }, 
         isAuthenticated: true, 
         isLoading: false,
-        userRole: role
+        userRole: role,
+        balance: wallet?.balance || 0
       });
       
       // Store role in localStorage
       localStorage.setItem('paypost_user_role', role);
       
+      // Update success notification
+      notify.update(toastId, {
+        render: 'Wallet connected successfully!',
+        type: 'success',
+        isLoading: false,
+        autoClose: 3000,
+      });
+      
       return user;
     } catch (error) {
       set({ isLoading: false });
+      
+      // Update error notification
+      if (toastId) {
+        notify.update(toastId, {
+          render: `Failed to connect wallet: ${error.message}`,
+          type: 'error',
+          isLoading: false,
+          autoClose: 5000,
+        });
+      }
+      
       throw error;
     }
   },
   
   logout: async () => {
     set({ isLoading: true });
+    
+    let toastId;
     try {
+      toastId = notify.loading('Disconnecting wallet...');
+      
       const { useMockAuth } = get();
       
       if (useMockAuth) {
@@ -95,11 +146,32 @@ export const useUserStore = create((set, get) => ({
         user: null, 
         isAuthenticated: false, 
         isLoading: false,
-        userRole: null
+        userRole: null,
+        balance: 0
       });
       localStorage.removeItem('paypost_user_role');
+      
+      // Update success notification
+      notify.update(toastId, {
+        render: 'Wallet disconnected successfully!',
+        type: 'success',
+        isLoading: false,
+        autoClose: 3000,
+      });
+      
     } catch (error) {
       set({ isLoading: false });
+      
+      // Update error notification
+      if (toastId) {
+        notify.update(toastId, {
+          render: `Failed to disconnect wallet: ${error.message}`,
+          type: 'error',
+          isLoading: false,
+          autoClose: 5000,
+        });
+      }
+      
       throw error;
     }
   },
@@ -113,11 +185,22 @@ export const useUserStore = create((set, get) => ({
   },
   
   getBalance: () => {
-    const { useMockAuth } = get();
+    const { useMockAuth, balance } = get();
     if (useMockAuth) {
       return mockAuthService.getBalance();
     }
-    return 0; // Would get from Privy in real implementation
+    return balance;
+  },
+  
+  updateBalance: async () => {
+    const { useMockAuth } = get();
+    if (useMockAuth) {
+      const newBalance = mockAuthService.getBalance();
+      set({ balance: newBalance });
+      return newBalance;
+    }
+    // In real implementation, would fetch from blockchain
+    return get().balance;
   },
   
   isCreator: () => {

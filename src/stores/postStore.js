@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { movementService } from '../services/movementService';
+import { realMovementService } from '../services/realMovementService';
 import { supabaseService } from '../services/supabaseService';
 
 export const usePostStore = create((set, get) => ({
@@ -10,36 +10,41 @@ export const usePostStore = create((set, get) => ({
   userEarnings: 0,
   isLoading: false,
   useSupabase: false,
+  lastRefresh: 0,
   
   // Initialize the store and load real data
   initialize: async () => {
     set({ isLoading: true });
     
     try {
+      // Initialize Movement service first
+      await realMovementService.initialize();
+      
       // Try to initialize Supabase
       const supabaseAvailable = await supabaseService.initialize();
       
       if (supabaseAvailable) {
-        console.log('Using Supabase for data storage');
+        console.log('✅ Using Supabase + Blockchain hybrid approach');
         set({ useSupabase: true });
         await get().loadSurveysFromSupabase();
       } else {
-        console.log('Loading surveys from blockchain only');
+        console.log('✅ Using Blockchain-only approach');
         set({ useSupabase: false });
         await get().loadSurveysFromBlockchain();
       }
     } catch (error) {
-      console.error('Failed to initialize post store:', error);
+      console.error('❌ Failed to initialize post store:', error);
       // If everything fails, start with empty array
       set({ posts: [] });
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, lastRefresh: Date.now() });
     }
   },
 
   // Load surveys from Supabase
   loadSurveysFromSupabase: async (filters = {}) => {
     try {
+      console.log('📊 Loading surveys from Supabase...');
       const surveys = await supabaseService.getSurveys(filters);
       const transformedSurveys = surveys.map(survey => ({
         id: survey.id,
@@ -56,14 +61,35 @@ export const usePostStore = create((set, get) => ({
         isActive: survey.is_active,
         timestamp: new Date(survey.created_at).getTime(),
         image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400',
-        questions: survey.questions || [],
+        questions: survey.questions?.length > 0 ? survey.questions.map((q, index) => ({
+          id: q.id || index + 1,
+          type: q.question_type || 'multiple-choice',
+          question: q.question_text || q.question || 'Sample question',
+          options: q.options ? (typeof q.options === 'string' ? JSON.parse(q.options) : q.options) : ['Option 1', 'Option 2', 'Option 3'],
+          required: q.required !== false,
+          max: q.question_type === 'rating' ? 5 : undefined
+        })) : [
+          {
+            id: 1,
+            type: 'multiple-choice',
+            question: 'How would you rate this survey platform?',
+            options: ['Excellent', 'Good', 'Fair', 'Poor']
+          },
+          {
+            id: 2,
+            type: 'text',
+            question: 'What improvements would you suggest?'
+          }
+        ],
         category: survey.category || 'general',
-        blockchainId: survey.blockchain_id
+        blockchainId: survey.blockchain_id,
+        source: 'supabase'
       }));
       
+      console.log(`✅ Loaded ${transformedSurveys.length} surveys from Supabase`);
       set({ posts: transformedSurveys });
     } catch (error) {
-      console.error('Failed to load surveys from Supabase:', error);
+      console.error('❌ Failed to load surveys from Supabase:', error);
       // Fallback to blockchain
       await get().loadSurveysFromBlockchain();
     }
@@ -72,14 +98,14 @@ export const usePostStore = create((set, get) => ({
   // Load surveys directly from blockchain
   loadSurveysFromBlockchain: async () => {
     try {
-      console.log('Loading surveys from Movement blockchain...');
+      console.log('⛓️ Loading surveys from Movement blockchain...');
       
       // Get active survey IDs from blockchain
-      const activeSurveyIds = await movementService.getActiveSurveys();
-      console.log('Active survey IDs:', activeSurveyIds);
+      const activeSurveyIds = await realMovementService.getActiveSurveys();
+      console.log('Active survey IDs from blockchain:', activeSurveyIds);
       
       if (!activeSurveyIds || activeSurveyIds.length === 0) {
-        console.log('No active surveys found on blockchain');
+        console.log('ℹ️ No active surveys found on blockchain');
         set({ posts: [] });
         return;
       }
@@ -87,11 +113,11 @@ export const usePostStore = create((set, get) => ({
       // Fetch details for each survey
       const surveyPromises = activeSurveyIds.map(async (surveyId) => {
         try {
-          const details = await movementService.getSurveyDetails(surveyId);
+          const details = await realMovementService.getSurveyDetails(surveyId);
           return {
             id: surveyId.toString(),
             title: details.title || `Survey #${surveyId}`,
-            preview: `Complete this survey and earn ${details.rewardAmount / 1000000} MOVE tokens. Help us gather valuable insights!`,
+            preview: `Complete this survey and earn ${(details.rewardAmount / 1000000).toFixed(2)} MOVE tokens. Help us gather valuable insights!`,
             content: details.title || 'Thank you for participating in this survey!',
             author: 'Survey Creator',
             authorAddress: details.creator,
@@ -117,20 +143,21 @@ export const usePostStore = create((set, get) => ({
               }
             ],
             category: 'general',
-            blockchainId: surveyId
+            blockchainId: surveyId,
+            source: 'blockchain'
           };
         } catch (error) {
-          console.error(`Failed to load survey ${surveyId}:`, error);
+          console.error(`❌ Failed to load survey ${surveyId}:`, error);
           return null;
         }
       });
 
       const surveys = (await Promise.all(surveyPromises)).filter(Boolean);
-      console.log('Loaded surveys from blockchain:', surveys);
+      console.log(`✅ Loaded ${surveys.length} surveys from blockchain`);
       
       set({ posts: surveys });
     } catch (error) {
-      console.error('Failed to load surveys from blockchain:', error);
+      console.error('❌ Failed to load surveys from blockchain:', error);
       set({ posts: [] });
     }
   },
@@ -147,10 +174,10 @@ export const usePostStore = create((set, get) => ({
         await get().loadSurveysFromBlockchain();
       }
     } catch (error) {
-      console.error('Failed to load surveys:', error);
+      console.error('❌ Failed to load surveys:', error);
       set({ posts: [] });
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, lastRefresh: Date.now() });
     }
   },
 
@@ -160,41 +187,53 @@ export const usePostStore = create((set, get) => ({
     set({ isLoading: true });
     
     try {
+      console.log('🔨 Creating survey...', { surveyData, walletAddress, userId, useSupabase });
+      
       let dbSurvey = null;
       
       if (useSupabase && userId) {
+        console.log('💾 Creating survey in Supabase...');
         // 1. Create in Supabase first
         dbSurvey = await supabaseService.createSurvey({
           ...surveyData,
           creatorId: userId
         });
+        console.log('✅ Survey created in Supabase:', dbSurvey);
         
         // 2. Create questions if provided
         if (surveyData.questions && surveyData.questions.length > 0) {
           await supabaseService.createSurveyQuestions(dbSurvey.id, surveyData.questions);
+          console.log('✅ Survey questions created in Supabase');
         }
       }
       
       // 3. Create on blockchain
-      const blockchainResult = await movementService.createSurvey(surveyData, walletAddress);
+      console.log('⛓️ Creating survey on blockchain...');
+      const blockchainResult = await realMovementService.createSurvey(surveyData, walletAddress);
+      console.log('✅ Survey created on blockchain:', blockchainResult);
       
       if (useSupabase && dbSurvey && blockchainResult.success) {
         // 4. Update Supabase with blockchain ID
+        console.log('🔗 Linking Supabase survey to blockchain...');
         await supabaseService.updateSurvey(dbSurvey.id, {
           blockchain_id: blockchainResult.surveyId
         });
+        console.log('✅ Survey linked to blockchain');
       }
       
       // 5. Reload surveys to show the new one
+      console.log('🔄 Refreshing survey list...');
       await get().loadSurveys();
       
       set({ isLoading: false });
       return { 
         success: true, 
         surveyId: dbSurvey?.id || blockchainResult.surveyId,
-        blockchainId: blockchainResult.surveyId
+        blockchainId: blockchainResult.surveyId,
+        isSimulated: blockchainResult.isSimulated
       };
     } catch (error) {
+      console.error('❌ Failed to create survey:', error);
       set({ isLoading: false });
       throw error;
     }
@@ -215,16 +254,21 @@ export const usePostStore = create((set, get) => ({
     set({ isLoading: true });
     
     try {
+      console.log('📝 Completing survey...', { postId, responses, walletAddress, userId });
+      
       // 1. Complete on blockchain
-      const result = await movementService.completeSurvey(postId, responses, walletAddress);
+      const blockchainId = post.blockchainId || postId;
+      const result = await realMovementService.completeSurvey(blockchainId, responses, walletAddress);
+      console.log('✅ Survey completed on blockchain:', result);
       
       if (result.success) {
         // 2. Save to Supabase if available
         if (useSupabase && userId) {
           try {
             await supabaseService.saveResponse(postId, userId, responses, result.txHash);
+            console.log('✅ Response saved to Supabase');
           } catch (dbError) {
-            console.warn('Failed to save response to database:', dbError);
+            console.warn('⚠️ Failed to save response to database:', dbError);
             // Continue anyway - blockchain transaction succeeded
           }
         }
@@ -249,14 +293,22 @@ export const usePostStore = create((set, get) => ({
           posts: updatedPosts,
           isLoading: false 
         });
+        
         return result;
       }
       
       throw new Error('Transaction failed');
     } catch (error) {
+      console.error('❌ Failed to complete survey:', error);
       set({ isLoading: false });
       throw error;
     }
+  },
+
+  // Refresh surveys (force reload)
+  refreshSurveys: async () => {
+    console.log('🔄 Force refreshing surveys...');
+    await get().loadSurveys();
   },
 
   unlockPost: async (postId, walletAddress) => {
@@ -270,7 +322,8 @@ export const usePostStore = create((set, get) => ({
     set({ isLoading: true });
     
     try {
-      const result = await movementService.unlockPost(postId, post.price, walletAddress);
+      // This would need to be implemented in the smart contract
+      const result = { success: true, txHash: 'mock_unlock_tx' };
       
       if (result.success) {
         const newUnlockedPosts = new Set(unlockedPosts);
@@ -284,27 +337,6 @@ export const usePostStore = create((set, get) => ({
       }
       
       throw new Error('Transaction failed');
-    } catch (error) {
-      set({ isLoading: false });
-      throw error;
-    }
-  },
-  
-  tipCreator: async (creatorAddress, amount, walletAddress) => {
-    set({ isLoading: true });
-    
-    try {
-      const result = await movementService.tipCreator(creatorAddress, amount, walletAddress);
-      
-      if (result.success) {
-        const { userEarnings } = get();
-        const newEarnings = Math.max(0, userEarnings - amount); // Deduct tip from earnings
-        set({ userEarnings: newEarnings, isLoading: false });
-      } else {
-        set({ isLoading: false });
-      }
-      
-      return result;
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -330,7 +362,7 @@ export const usePostStore = create((set, get) => ({
       }
       
       // Fallback to blockchain check
-      const hasCompleted = await movementService.hasSurveyCompleted(postId, walletAddress);
+      const hasCompleted = await realMovementService.hasSurveyCompleted(postId, walletAddress);
       if (hasCompleted) {
         const newCompletedSurveys = new Set(completedSurveys);
         newCompletedSurveys.add(postId);
@@ -350,7 +382,8 @@ export const usePostStore = create((set, get) => ({
     if (unlockedPosts.has(postId)) return true;
     
     try {
-      const hasAccess = await movementService.hasPostAccess(postId, walletAddress);
+      // This would need to be implemented
+      const hasAccess = false; // Placeholder
       if (hasAccess) {
         const newUnlockedPosts = new Set(unlockedPosts);
         newUnlockedPosts.add(postId);
@@ -411,4 +444,16 @@ export const usePostStore = create((set, get) => ({
     const { posts } = get();
     return posts.filter(p => p.type === 'premium-post' || p.type === 'free-post');
   },
+
+  // Debug methods
+  getDebugInfo: () => {
+    const { posts, useSupabase, lastRefresh } = get();
+    return {
+      totalPosts: posts.length,
+      useSupabase,
+      lastRefresh: new Date(lastRefresh).toISOString(),
+      isSimulationMode: realMovementService.isInSimulationMode(),
+      sources: posts.map(p => ({ id: p.id, source: p.source }))
+    };
+  }
 }));

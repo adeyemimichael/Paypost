@@ -1,309 +1,317 @@
 import { motion } from 'framer-motion';
 import { 
-  ArrowLeft, 
   Target, 
   Users, 
-  Zap, 
   Shield, 
+  Zap, 
   Globe, 
-  Coins,
-  TrendingUp,
-  Heart,
   Award,
-  Sparkles,
-  CheckCircle
+  Heart,
+  TrendingUp,
+  CheckCircle,
+  Coins
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { fadeIn, slideUp } from '../animations/fadeIn';
-import Card from '../components/Card';
 import Button from '../components/Button';
 
 const AboutPage = () => {
-  const values = [
-    {
-      icon: <Target className="w-8 h-8 text-blue-500" />,
-      title: 'Transparency',
-      description: 'Every transaction, reward, and interaction is recorded on the blockchain for complete transparency.'
-    },
-    {
-      icon: <Users className="w-8 h-8 text-green-500" />,
-      title: 'Community First',
-      description: 'We put our community at the center of everything we do, ensuring fair rewards and quality content.'
-    },
-    {
-      icon: <Zap className="w-8 h-8 text-yellow-500" />,
-      title: 'Innovation',
-      description: 'Pioneering the future of content monetization through cutting-edge Web3 technology.'
-    },
-    {
-      icon: <Shield className="w-8 h-8 text-purple-500" />,
-      title: 'Security',
-      description: 'Your data and earnings are protected by industry-leading blockchain security protocols.'
-    }
-  ];
-
-  const team = [
+  const teamMembers = [
     {
       name: 'Alex Chen',
-      role: 'Founder & CEO',
-      bio: 'Former blockchain engineer at Coinbase with 8+ years in Web3',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'
+      role: 'CEO & Co-Founder',
+      bio: 'Former Google PM with 8+ years in Web3. Built 3 successful startups.',
+      image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
+      linkedin: '#'
     },
     {
       name: 'Sarah Kim',
-      role: 'CTO',
-      bio: 'Ex-Google engineer specializing in distributed systems and smart contracts',
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150'
+      role: 'CTO & Co-Founder',
+      bio: 'Ex-Coinbase engineer. Expert in blockchain infrastructure and smart contracts.',
+      image: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
+      linkedin: '#'
     },
     {
       name: 'Marcus Johnson',
       role: 'Head of Product',
-      bio: 'Product leader from Meta with expertise in user experience and growth',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'
-    },
-    {
-      name: 'Lisa Zhang',
-      role: 'Head of Research',
-      bio: 'PhD in Economics, former researcher at Stanford focusing on digital economies',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150'
+      bio: 'Former Uber product lead. Passionate about user experience and growth.',
+      image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+      linkedin: '#'
     }
   ];
 
   const milestones = [
     {
-      date: 'Q1 2024',
+      date: '2024 Q1',
       title: 'Platform Launch',
-      description: 'PayPost launches on Movement testnet with core survey functionality'
+      description: 'Launched PayPost on Movement testnet with core survey functionality',
+      icon: <Zap className="w-6 h-6" />
     },
     {
-      date: 'Q2 2024',
-      title: 'Creator Program',
-      description: 'Launch creator application system and premium content features'
+      date: '2024 Q2',
+      title: 'Community Growth',
+      description: 'Reached 8,000+ active users and 15,000+ completed surveys',
+      icon: <Users className="w-6 h-6" />
     },
     {
-      date: 'Q3 2024',
-      title: 'Mainnet Deployment',
-      description: 'Full deployment on Movement mainnet with enhanced features'
+      date: '2024 Q3',
+      title: 'Token Distribution',
+      description: 'Distributed over 2,500 MOVE tokens to survey participants',
+      icon: <Coins className="w-6 h-6" />
     },
     {
-      date: 'Q4 2024',
-      title: 'Global Expansion',
-      description: 'Multi-language support and international creator partnerships'
+      date: '2024 Q4',
+      title: 'Advanced Features',
+      description: 'Launched AI-powered matching and zero-knowledge privacy',
+      icon: <Shield className="w-6 h-6" />
+    }
+  ];
+
+  const values = [
+    {
+      icon: <Heart className="w-8 h-8 text-red-500" />,
+      title: 'User-First',
+      description: 'Every decision we make prioritizes user experience and value creation.'
+    },
+    {
+      icon: <Shield className="w-8 h-8 text-blue-500" />,
+      title: 'Privacy-Focused',
+      description: 'Your data belongs to you. We use zero-knowledge proofs to protect privacy.'
+    },
+    {
+      icon: <CheckCircle className="w-8 h-8 text-green-500" />,
+      title: 'Transparency',
+      description: 'Open-source smart contracts and transparent reward distribution.'
+    },
+    {
+      icon: <TrendingUp className="w-8 h-8 text-purple-500" />,
+      title: 'Innovation',
+      description: 'Pushing the boundaries of Web3 UX and blockchain technology.'
     }
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <motion.div {...fadeIn} className="mb-12">
-          <Link 
-            to="/" 
-            className="inline-flex items-center text-movement-600 dark:text-movement-400 hover:text-movement-700 dark:hover:text-movement-300 mb-6"
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900">
+      {/* Hero Section */}
+      <motion.section {...fadeIn} className="py-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto text-center">
+          <motion.h1 
+            {...slideUp}
+            className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Home
-          </Link>
-          
-          <div className="text-center">
-            <motion.h1 
-              {...slideUp}
-              className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-6"
-            >
-              About PayPost
-            </motion.h1>
-            <motion.p 
-              {...slideUp}
-              transition={{ delay: 0.1 }}
-              className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto"
-            >
-              We're revolutionizing how people earn from their opinions and access quality content through Web3 technology.
-            </motion.p>
+            Democratizing <span className="text-transparent bg-clip-text bg-gradient-to-r from-movement-600 to-purple-600">Market Research</span>
+          </motion.h1>
+          <motion.p 
+            {...slideUp}
+            transition={{ delay: 0.2 }}
+            className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto"
+          >
+            PayPost is revolutionizing how market research works by creating a fair, transparent, 
+            and rewarding ecosystem where everyone wins - researchers get quality data, 
+            participants get fairly compensated.
+          </motion.p>
+        </div>
+      </motion.section>
+
+      {/* Mission Section */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white/50 dark:bg-gray-800/50">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <motion.div {...fadeIn}>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
+                Our Mission
+              </h2>
+              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
+                Traditional market research is broken. Participants spend time providing valuable insights 
+                but receive little to no compensation, while researchers pay high fees to intermediaries 
+                who don't add real value.
+              </p>
+              <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
+                We're building a direct connection between researchers and participants, powered by 
+                blockchain technology to ensure instant, fair payments and complete transparency.
+              </p>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-movement-600 mb-2">8K+</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Active Users</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-movement-600 mb-2">2.5K</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">MOVE Distributed</div>
+                </div>
+              </div>
+            </motion.div>
+            <motion.div {...fadeIn} transition={{ delay: 0.3 }}>
+              <div className="relative">
+                <img 
+                  src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&h=400&fit=crop" 
+                  alt="Team collaboration" 
+                  className="rounded-2xl shadow-2xl"
+                />
+                <div className="absolute inset-0 bg-gradient-to-tr from-movement-500/20 to-purple-500/20 rounded-2xl"></div>
+              </div>
+            </motion.div>
           </div>
-        </motion.div>
+        </div>
+      </section>
 
-        {/* Mission Section */}
-        <motion.section {...slideUp} transition={{ delay: 0.2 }} className="mb-20">
-          <Card className="p-12 text-center bg-gradient-to-r from-movement-50 to-purple-50 dark:from-movement-900 dark:to-purple-900 border-movement-200 dark:border-movement-700">
-            <Sparkles className="w-16 h-16 text-movement-500 mx-auto mb-6" />
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
-              Our Mission
-            </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-4xl mx-auto leading-relaxed">
-              To create a fair, transparent, and rewarding ecosystem where people's opinions have real value, 
-              creators are properly compensated, and quality content thrives through blockchain technology. 
-              We believe everyone deserves to be rewarded for their contributions to the digital economy.
-            </p>
-          </Card>
-        </motion.section>
-
-        {/* Values Section */}
-        <motion.section {...slideUp} transition={{ delay: 0.3 }} className="mb-20">
-          <div className="text-center mb-12">
+      {/* Values Section */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <motion.div {...fadeIn} className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
               Our Values
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300">
-              The principles that guide everything we do
+            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              These core principles guide everything we do at PayPost
             </p>
-          </div>
-
+          </motion.div>
+          
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {values.map((value, index) => (
               <motion.div
-                key={index}
-                {...slideUp}
-                transition={{ delay: 0.4 + index * 0.1 }}
+                key={value.title}
+                {...fadeIn}
+                transition={{ delay: index * 0.1 }}
+                className="text-center p-6 rounded-2xl bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-300"
               >
-                <Card className="p-6 text-center h-full hover:shadow-lg transition-shadow dark:bg-gray-800 dark:border-gray-700">
-                  <div className="mb-4">
-                    {value.icon}
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
-                    {value.title}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300 text-sm">
-                    {value.description}
-                  </p>
-                </Card>
+                <div className="flex justify-center mb-4">
+                  {value.icon}
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
+                  {value.title}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-300">
+                  {value.description}
+                </p>
               </motion.div>
             ))}
           </div>
-        </motion.section>
+        </div>
+      </section>
 
-        {/* Team Section */}
-        <motion.section {...slideUp} transition={{ delay: 0.5 }} className="mb-20">
-          <div className="text-center mb-12">
+      {/* Team Section */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white/50 dark:bg-gray-800/50">
+        <div className="max-w-6xl mx-auto">
+          <motion.div {...fadeIn} className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
               Meet Our Team
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300">
-              Experienced builders from top tech companies and Web3 projects
+            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              Experienced builders from top tech companies, united by a vision to democratize market research
             </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {team.map((member, index) => (
+          </motion.div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {teamMembers.map((member, index) => (
               <motion.div
-                key={index}
-                {...slideUp}
-                transition={{ delay: 0.6 + index * 0.1 }}
+                key={member.name}
+                {...fadeIn}
+                transition={{ delay: index * 0.2 }}
+                className="text-center p-6 rounded-2xl bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all duration-300"
               >
-                <Card className="p-6 text-center hover:shadow-lg transition-shadow dark:bg-gray-800 dark:border-gray-700">
-                  <img
-                    src={member.avatar}
-                    alt={member.name}
-                    className="w-20 h-20 rounded-full mx-auto mb-4 object-cover"
-                  />
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                    {member.name}
-                  </h3>
-                  <p className="text-movement-600 dark:text-movement-400 text-sm font-medium mb-3">
-                    {member.role}
-                  </p>
-                  <p className="text-gray-600 dark:text-gray-300 text-sm">
-                    {member.bio}
-                  </p>
-                </Card>
+                <img 
+                  src={member.image} 
+                  alt={member.name}
+                  className="w-24 h-24 rounded-full mx-auto mb-4 object-cover"
+                />
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  {member.name}
+                </h3>
+                <p className="text-movement-600 dark:text-movement-400 font-medium mb-3">
+                  {member.role}
+                </p>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  {member.bio}
+                </p>
               </motion.div>
             ))}
           </div>
-        </motion.section>
+        </div>
+      </section>
 
-        {/* Roadmap Section */}
-        <motion.section {...slideUp} transition={{ delay: 0.7 }} className="mb-20">
-          <div className="text-center mb-12">
+      {/* Roadmap Section */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <motion.div {...fadeIn} className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-              Our Roadmap
+              Our Journey
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300">
-              Building the future of Web3 content monetization
+            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              Key milestones in building the future of market research
             </p>
-          </div>
-
-          <div className="space-y-8">
-            {milestones.map((milestone, index) => (
-              <motion.div
-                key={index}
-                {...slideUp}
-                transition={{ delay: 0.8 + index * 0.1 }}
-                className="flex items-start space-x-6"
-              >
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-movement-500 rounded-full flex items-center justify-center">
-                    <CheckCircle className="w-6 h-6 text-white" />
+          </motion.div>
+          
+          <div className="relative">
+            {/* Timeline line */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 w-1 h-full bg-gradient-to-b from-movement-500 to-purple-500 rounded-full"></div>
+            
+            <div className="space-y-12">
+              {milestones.map((milestone, index) => (
+                <motion.div
+                  key={milestone.date}
+                  {...fadeIn}
+                  transition={{ delay: index * 0.2 }}
+                  className={`flex items-center ${index % 2 === 0 ? 'flex-row' : 'flex-row-reverse'}`}
+                >
+                  <div className={`w-1/2 ${index % 2 === 0 ? 'pr-8 text-right' : 'pl-8 text-left'}`}>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
+                      <div className="text-movement-600 dark:text-movement-400 font-semibold mb-2">
+                        {milestone.date}
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
+                        {milestone.title}
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-300">
+                        {milestone.description}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <Card className="flex-1 p-6 dark:bg-gray-800 dark:border-gray-700">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {milestone.title}
-                    </h3>
-                    <span className="text-sm font-medium text-movement-600 dark:text-movement-400 bg-movement-100 dark:bg-movement-900 px-3 py-1 rounded-full">
-                      {milestone.date}
-                    </span>
+                  
+                  {/* Timeline dot */}
+                  <div className="relative z-10 flex items-center justify-center w-12 h-12 bg-white dark:bg-gray-800 border-4 border-movement-500 rounded-full">
+                    <div className="text-movement-600 dark:text-movement-400">
+                      {milestone.icon}
+                    </div>
                   </div>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    {milestone.description}
-                  </p>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </motion.section>
-
-        {/* Stats Section */}
-        <motion.section {...slideUp} transition={{ delay: 0.9 }} className="mb-20">
-          <Card className="p-12 bg-gradient-to-r from-movement-500 to-purple-600 text-white text-center">
-            <h2 className="text-3xl font-bold mb-8">PayPost by the Numbers</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-              <div>
-                <div className="text-4xl font-bold mb-2">8K+</div>
-                <div className="text-movement-100">Active Users</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold mb-2">15K+</div>
-                <div className="text-movement-100">Surveys Completed</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold mb-2">2.5K</div>
-                <div className="text-movement-100">MOVE Distributed</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold mb-2">150+</div>
-                <div className="text-movement-100">Content Creators</div>
-              </div>
+                  
+                  <div className="w-1/2"></div>
+                </motion.div>
+              ))}
             </div>
-          </Card>
-        </motion.section>
+          </div>
+        </div>
+      </section>
 
-        {/* CTA Section */}
-        <motion.section {...slideUp} transition={{ delay: 1.0 }} className="text-center">
-          <Card className="p-12 dark:bg-gray-800 dark:border-gray-700">
-            <Heart className="w-16 h-16 text-red-500 mx-auto mb-6" />
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-              Join Our Community
+      {/* CTA Section */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-movement-600 to-purple-600">
+        <div className="max-w-4xl mx-auto text-center">
+          <motion.div {...fadeIn}>
+            <h2 className="text-3xl font-bold text-white mb-6">
+              Ready to Join the Revolution?
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto">
-              Be part of the Web3 revolution. Start earning from your opinions and help shape the future of decentralized content.
+            <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
+              Whether you're a researcher looking for quality insights or someone who wants to earn by sharing opinions, 
+              PayPost is the platform for you.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/feed">
-                <Button size="lg" className="px-8 py-3">
-                  <Coins className="w-5 h-5 mr-2" />
-                  Start Earning
-                </Button>
-              </Link>
-              <Link to="/creators">
-                <Button variant="outline" size="lg" className="px-8 py-3">
-                  <Award className="w-5 h-5 mr-2" />
-                  Become a Creator
-                </Button>
-              </Link>
+              <Button 
+                variant="secondary" 
+                size="lg"
+                className="bg-white text-movement-600 hover:bg-gray-100"
+              >
+                Start Earning Now
+              </Button>
+              <Button 
+                variant="outline" 
+                size="lg"
+                className="border-white text-white hover:bg-white hover:text-movement-600"
+              >
+                Become a Creator
+              </Button>
             </div>
-          </Card>
-        </motion.section>
-      </div>
+          </motion.div>
+        </div>
+      </section>
     </div>
   );
 };

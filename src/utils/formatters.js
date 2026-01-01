@@ -25,3 +25,9 @@ export const truncateText = (text, maxLength = 100) => {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + '...';
 };
+
+export const formatTokenAmount = (amount) => {
+  if (amount === 0) return '0.00';
+  if (amount < 0.01) return '<0.01';
+  return Number(amount).toFixed(2);
+};

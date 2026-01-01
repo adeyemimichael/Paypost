@@ -9,12 +9,15 @@ import {
   Clock, 
   FileText,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Wallet
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
+import { usePostStore } from '../stores/postStore';
 import { movementService } from '../services/movementService';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
+import WalletBalance from '../components/WalletBalance';
 import { notify } from '../utils/notify';
 
 const CreateSurveyPage = () => {
@@ -128,6 +131,15 @@ const CreateSurveyPage = () => {
     if (surveyData.rewardAmount <= 0) return 'Reward amount must be greater than 0';
     if (surveyData.maxResponses <= 0) return 'Max responses must be greater than 0';
     
+    // Check if user has sufficient balance
+    const { getBalance } = useUserStore.getState();
+    const userBalance = getBalance();
+    const totalCost = calculateTotalCost();
+    
+    if (userBalance < totalCost) {
+      return `Insufficient balance. You need ${totalCost.toFixed(2)} MOVE but only have ${userBalance.toFixed(2)} MOVE`;
+    }
+    
     for (let question of surveyData.questions) {
       if (!question.question.trim()) return 'All questions must have text';
       if (['multiple-choice', 'checkbox'].includes(question.type)) {
@@ -158,14 +170,23 @@ const CreateSurveyPage = () => {
     try {
       const durationSeconds = surveyData.durationDays * 24 * 60 * 60;
       
-      const result = await movementService.createSurvey({
+      // Use the post store's createSurvey method which handles both Supabase and blockchain
+      const { createSurvey } = usePostStore.getState();
+      const { user } = useUserStore.getState();
+      
+      const result = await createSurvey({
         title: surveyData.title,
         description: surveyData.description,
         rewardAmount: surveyData.rewardAmount,
         maxResponses: surveyData.maxResponses,
         durationSeconds,
-        questions: surveyData.questions
-      }, walletAddress);
+        questions: surveyData.questions.map(q => ({
+          text: q.question,
+          type: q.type,
+          options: q.options,
+          required: true
+        }))
+      }, walletAddress, user?.id);
 
       if (result.success) {
         notify.success(`Survey created successfully! ID: ${result.surveyId}`);
@@ -182,14 +203,31 @@ const CreateSurveyPage = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
+        {/* Header with Wallet Balance */}
         <motion.div {...fadeIn} className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
             Create New Survey
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-lg text-gray-600 mb-6">
             Design your survey and set rewards to gather valuable insights from the community
           </p>
+          
+          {/* Wallet Balance Display */}
+          <div className="flex justify-center">
+            <div className="bg-gradient-to-r from-green-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg">
+              <div className="flex items-center justify-center space-x-3">
+                <Wallet className="w-6 h-6" />
+                <div className="text-left">
+                  <div className="text-sm opacity-90">Available Balance</div>
+                  <WalletBalance 
+                    size="md" 
+                    showLabel={false} 
+                    className="bg-white/20 border-white/30 text-white [&>*]:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </motion.div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -301,6 +339,37 @@ const CreateSurveyPage = () => {
                   <span className="font-bold text-blue-900">{calculateTotalCost().toFixed(2)} MOVE</span>
                 </div>
               </div>
+              
+              {/* Balance Warning */}
+              {(() => {
+                const { getBalance } = useUserStore.getState();
+                const userBalance = getBalance();
+                const totalCost = calculateTotalCost();
+                
+                if (userBalance < totalCost) {
+                  return (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center text-red-700">
+                        <AlertCircle className="w-4 h-4 mr-2" />
+                        <span className="text-sm font-medium">
+                          Insufficient Balance: Need {(totalCost - userBalance).toFixed(2)} more MOVE
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center text-green-700">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      <span className="text-sm font-medium">
+                        Sufficient Balance: {(userBalance - totalCost).toFixed(2)} MOVE remaining
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </motion.div>
 

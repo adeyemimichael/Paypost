@@ -48,6 +48,27 @@ class SupabaseService {
     }
   }
 
+  async getOrCreateUser(walletAddress, email = null, role = 'reader') {
+    try {
+      // First try to get existing user
+      let user = await this.getUser(walletAddress);
+      
+      if (!user) {
+        // Create new user if doesn't exist
+        user = await this.createUser(
+          walletAddress, 
+          email || `${walletAddress}@paypost.xyz`, 
+          role
+        );
+      }
+      
+      return user;
+    } catch (error) {
+      console.error('Failed to get or create user:', error);
+      return null;
+    }
+  }
+
   async getUser(walletAddress) {
     try {
       const { data, error } = await supabase

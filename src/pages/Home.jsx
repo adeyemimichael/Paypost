@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ArrowRight, 
   Zap, 
@@ -16,38 +16,58 @@ import {
   Lock
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useUserStore } from '../stores/userStore';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
 import RoleSelectionModal from '../components/RoleSelectionModal';
 
 const Home = () => {
   const { ready, authenticated } = usePrivy();
+  const { userRole } = useUserStore();
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const handleGetStarted = () => {
     if (!authenticated) {
+      setIsConnecting(true);
       setShowRoleModal(true);
     }
   };
 
+  const handleRoleModalClose = () => {
+    setShowRoleModal(false);
+    setIsConnecting(false);
+  };
+
+  // Close modal when user becomes authenticated
+  useEffect(() => {
+    if (authenticated && userRole) {
+      setShowRoleModal(false);
+      setIsConnecting(false);
+    }
+  }, [authenticated, userRole]);
+
   const features = [
     {
       icon: <Zap className="w-8 h-8 text-yellow-500" />,
-      title: 'Instant Rewards',
-      description: 'Complete surveys and polls to earn MOVE tokens instantly. Your opinions have real value in the Web3 economy.',
-      highlight: '0.1-1.0 MOVE per survey'
+      title: 'AI-Powered Smart Matching',
+      description: 'Our intelligent algorithm matches you with surveys that align with your interests and expertise, maximizing your earning potential while providing creators with higher-quality responses.',
+      highlight: 'Up to 3x higher earnings',
+      gradient: 'from-yellow-400 to-orange-500'
     },
     {
       icon: <Shield className="w-8 h-8 text-blue-500" />,
-      title: 'Secure & Private',
-      description: 'Your responses are protected by blockchain security. Anonymous participation with embedded wallets.',
-      highlight: 'No seed phrases needed'
+      title: 'Zero-Knowledge Privacy',
+      description: 'Revolutionary privacy protection using zero-knowledge proofs. Your personal data stays private while still enabling reward verification and fraud prevention.',
+      highlight: 'Military-grade privacy',
+      gradient: 'from-blue-400 to-cyan-500'
     },
     {
       icon: <DollarSign className="w-8 h-8 text-green-500" />,
-      title: 'Real Value',
-      description: 'Earn real MOVE tokens that you can use, trade, or tip to support your favorite creators.',
-      highlight: 'Instant withdrawals'
+      title: 'Dynamic Reward Pools',
+      description: 'Participate in community-driven reward pools where high-quality responses earn bonus multipliers. The more valuable your insights, the more you earn.',
+      highlight: 'Up to 10x bonus rewards',
+      gradient: 'from-green-400 to-emerald-500'
     },
   ];
 
@@ -201,23 +221,26 @@ const Home = () => {
                 <Button
                   size="lg"
                   onClick={handleGetStarted}
-                  disabled={!ready}
+                  disabled={!ready || isConnecting}
+                  loading={isConnecting}
                   className="w-full sm:w-auto px-10 py-4 text-lg bg-gradient-to-r from-movement-500 to-movement-600 hover:from-movement-600 hover:to-movement-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center"
                 >
                   <Zap className="w-5 h-5 mr-2 flex-shrink-0" />
-                  <span>Choose Role & Start</span>
+                  <span>{isConnecting ? 'Connecting...' : 'Choose Role & Start'}</span>
                   <ArrowRight className="w-5 h-5 ml-2 flex-shrink-0" />
                 </Button>
               )}
               
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full sm:w-auto px-10 py-4 text-lg border-2 border-gray-300 dark:border-gray-600 hover:border-movement-500 dark:hover:border-movement-400 group flex items-center justify-center"
-              >
-                <Shield className="w-5 h-5 mr-2 group-hover:text-movement-500 flex-shrink-0" />
-                <span>Learn More</span>
-              </Button>
+              <Link to="/how-it-works">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full sm:w-auto px-10 py-4 text-lg border-2 border-gray-300 dark:border-gray-600 hover:border-movement-500 dark:hover:border-movement-400 group flex items-center justify-center"
+                >
+                  <Shield className="w-5 h-5 mr-2 group-hover:text-movement-500 flex-shrink-0" />
+                  <span>How It Works</span>
+                </Button>
+              </Link>
             </motion.div>
 
             {/* Stats */}
@@ -369,11 +392,12 @@ const Home = () => {
                   <Button
                     size="lg"
                     onClick={handleGetStarted}
-                    disabled={!ready}
+                    disabled={!ready || isConnecting}
+                    loading={isConnecting}
                     className="bg-white text-movement-600 hover:bg-gray-100 px-10 py-4 text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
                   >
                     <Users className="w-5 h-5 mr-2" />
-                    Join PayPost
+                    {isConnecting ? 'Connecting...' : 'Join PayPost'}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 )}
@@ -386,7 +410,7 @@ const Home = () => {
       {/* Role Selection Modal */}
       <RoleSelectionModal 
         isOpen={showRoleModal} 
-        onClose={() => setShowRoleModal(false)} 
+        onClose={handleRoleModalClose} 
       />
     </div>
   );

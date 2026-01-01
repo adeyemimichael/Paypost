@@ -27,7 +27,7 @@ class MockAuthService {
         
         this.isAuthenticated = true;
         
-        notify.success('Mock wallet connected successfully!');
+        // Don't show notification here - let the calling component handle it
         resolve(this.wallet);
       }, 1000);
     });
@@ -40,7 +40,7 @@ class MockAuthService {
         this.user = null;
         this.wallet = null;
         
-        notify.success('Wallet disconnected');
+        // Don't show notification here - let the calling component handle it
         resolve();
       }, 500);
     });
@@ -76,6 +76,22 @@ class MockAuthService {
         });
       }, 2000);
     });
+  }
+
+  // Mock balance update (simulate earning tokens)
+  addBalance(amount) {
+    if (this.wallet) {
+      this.wallet.balance += amount;
+    }
+  }
+
+  // Mock balance deduction (simulate spending tokens)
+  deductBalance(amount) {
+    if (this.wallet && this.wallet.balance >= amount) {
+      this.wallet.balance -= amount;
+      return true;
+    }
+    return false;
   }
 }
 
