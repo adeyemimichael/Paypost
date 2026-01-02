@@ -1,35 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, ExternalLink, AlertCircle } from 'lucide-react';
+import { Wallet, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useUserStore } from '../stores/userStore';
-import { nightlyWalletService } from '../services/nightlyWalletService';
+import { movementWalletService } from '../services/nightlyWalletService';
 import Button from './Button';
 
 const WalletSelector = ({ onClose }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState(null);
+  const [availableWallets, setAvailableWallets] = useState([]);
   const { login } = useUserStore();
   const privy = usePrivy();
 
-  const walletOptions = [
-    {
-      id: 'privy',
-      name: 'Privy (Email/Social)',
-      description: 'Easy login with email or social accounts',
-      icon: '🔐',
-      available: true,
-      recommended: true
-    },
-    {
-      id: 'nightly',
-      name: 'Nightly Wallet',
-      description: 'Native Movement blockchain wallet',
-      icon: '🌙',
-      available: nightlyWalletService.isWalletInstalled(),
-      installUrl: 'https://nightly.app'
-    }
-  ];
+  useEffect(() => {
+    // Get available Movement wallets
+    const wallets = movementWalletService.getAvailableWallets();
+    
+    const walletOptions = [
+      {
+        id: 'privy',
+        name: 'Privy (Email/Social)',
+        description: 'Easy login with email or social accounts - Best for participants',
+        icon: '🔐',
+        available: true,
+        recommended: true,
+        type: 'auth'
+      },
+      ...wallets.map(wallet => ({
+        id: wallet.type,
+        name: wallet.name,
+        description: `Native Movement wallet - Best for creators`,
+        icon: wallet.icon,
+        available: wallet.installed,
+        installUrl: wallet.downloadUrl,
+        type: 'movement'
+      }))
+    ];
+
+    setAvailableWallets(walletOptions);
+  }, []);
 
   const handleWalletConnect = async (walletType) => {
     setIsConnecting(true);
@@ -39,15 +49,15 @@ const WalletSelector = ({ onClose }) => {
       if (walletType === 'privy') {
         // Use existing Privy flow
         await login();
-      } else if (walletType === 'nightly') {
-        // Use Nightly wallet
-        const wallet = await nightlyWalletService.connectWallet();
-        const user = nightlyWalletService.getUser();
+      } else {
+        // Use Movement wallet (Nightly, Petra, Martian)
+        const wallet = await movementWalletService.connectWallet(walletType);
+        const user = movementWalletService.getUser();
         
-        // Update user store with Nightly wallet info
+        // Update user store with Movement wallet info
         const { setUser, setUserRole } = useUserStore.getState();
         setUser({ ...user, wallet });
-        setUserRole('creator'); // Default to creator for Nightly users
+        setUserRole('creator'); // Default to creator for Movement wallet users
       }
       
       onClose();
@@ -87,7 +97,7 @@ const WalletSelector = ({ onClose }) => {
           </div>
 
           <div className="space-y-3">
-            {walletOptions.map((wallet) => (
+            {availableWallets.map((wallet) => (
               <div key={wallet.id} className="relative">
                 <button
                   onClick={() => wallet.available && handleWalletConnect(wallet.id)}
@@ -112,6 +122,9 @@ const WalletSelector = ({ onClose }) => {
                           <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
                             Recommended
                           </span>
+                        )}
+                        {wallet.available && wallet.type === 'movement' && (
+                          <CheckCircle className="w-4 h-4 text-green-500" />
                         )}
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
@@ -156,7 +169,12 @@ const WalletSelector = ({ onClose }) => {
           </div>
 
           <div className="mt-4 text-xs text-gray-500 dark:text-gray-400 text-center">
-            Your wallet will be used to sign transactions and receive MOVE tokens
+            <div className="mb-2">
+              <strong>Privy:</strong> Easy for participants, uses email/social login
+            </div>
+            <div>
+              <strong>Movement Wallets:</strong> Required for creators to fund surveys with real MOVE tokens
+            </div>
           </div>
         </motion.div>
       </div>

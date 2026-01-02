@@ -77,7 +77,10 @@ const SurveyModal = ({ isOpen, onClose, post }) => {
 
   const handleSubmit = async () => {
     try {
-      await completeSurvey(post.id, responses, walletAddress);
+      const { getDatabaseUserId } = useUserStore.getState();
+      const databaseUserId = getDatabaseUserId();
+      
+      await completeSurvey(post.id, responses, walletAddress, databaseUserId);
       setIsCompleted(true);
     } catch (error) {
       console.error('Failed to complete survey:', error);

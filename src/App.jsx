@@ -95,7 +95,7 @@ const App = () => {
     <PrivyProvider
       appId={privyAppId}
       config={{
-        loginMethods: ['email', 'google', 'twitter'],
+        loginMethods: ['email', 'google', 'wallet'],
         appearance: {
           theme: 'light',
           accentColor: '#6366f1',
@@ -103,6 +103,7 @@ const App = () => {
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
         },
+        // Configure for Movement blockchain (Aptos-compatible)
         supportedChains: [
           {
             id: 250,
@@ -127,12 +128,16 @@ const App = () => {
             testnet: true,
           },
         ],
-        // Remove Solana configuration to fix warnings
+        // Configure external wallets for Movement
         externalWallets: {
           coinbaseWallet: {
-            // Only include supported chains
             connectionOptions: {
               appName: 'PayPost',
+            },
+          },
+          walletConnect: {
+            connectionOptions: {
+              projectId: 'paypost-movement-integration',
             },
           },
         },

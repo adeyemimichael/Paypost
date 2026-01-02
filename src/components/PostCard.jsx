@@ -21,13 +21,12 @@ import { formatPrice, formatAddress, formatTimeAgo, truncateText } from '../util
 import { fadeIn } from '../animations/fadeIn';
 import Button from './Button';
 import Card from './Card';
-import TipModal from './TipModal';
+import LikeButton from './LikeButton';
 import SurveyModal from './SurveyModal';
 
 const PostCard = ({ post, onComplete }) => {
   const { isAuthenticated, getWalletAddress, isCreator } = useUserStore();
   const { isSurveyCompleted, isPostUnlocked, checkSurveyCompletion, checkPostAccess, unlockPost, isLoading } = usePostStore();
-  const [showTipModal, setShowTipModal] = useState(false);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [hasCompleted, setHasCompleted] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -83,10 +82,6 @@ const PostCard = ({ post, onComplete }) => {
     } catch (error) {
       console.error('Failed to unlock post:', error);
     }
-  };
-
-  const handleTip = () => {
-    setShowTipModal(true);
   };
 
   const calculateEarnings = () => {
@@ -423,18 +418,13 @@ const PostCard = ({ post, onComplete }) => {
                 )}
               </div>
 
-              <div className="flex items-center space-x-2">
-                {!isOwnPost && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTip}
-                    disabled={!isAuthenticated}
-                  >
-                    <Heart className="w-4 h-4 mr-1" />
-                    Tip
-                  </Button>
-                )}
+              <div className="flex items-center justify-between">
+                {/* Like Button */}
+                <LikeButton 
+                  postId={post.id}
+                  initialLikes={post.likes || Math.floor(Math.random() * 50) + 5} // Random likes for demo
+                  className="text-xs"
+                />
                 <span className="text-sm text-gray-500">
                   {formatAddress(post.authorAddress)}
                 </span>
@@ -445,23 +435,12 @@ const PostCard = ({ post, onComplete }) => {
       </motion.div>
 
       {/* Modals - Only for participants */}
-      {!isCreator() && (
-        <>
-          <TipModal
-            isOpen={showTipModal}
-            onClose={() => setShowTipModal(false)}
-            creatorAddress={post.authorAddress}
-            creatorName={post.author}
-          />
-          
-          {(post.type === 'survey' || post.type === 'poll') && (
-            <SurveyModal
-              isOpen={showSurveyModal}
-              onClose={handleSurveyComplete}
-              post={post}
-            />
-          )}
-        </>
+      {!isCreator() && (post.type === 'survey' || post.type === 'poll') && (
+        <SurveyModal
+          isOpen={showSurveyModal}
+          onClose={handleSurveyComplete}
+          post={post}
+        />
       )}
     </>
   );

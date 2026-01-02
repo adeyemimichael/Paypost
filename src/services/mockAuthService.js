@@ -14,9 +14,13 @@ class MockAuthService {
         // Generate mock wallet address
         const mockAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
         
+        // Try to load persisted balance, otherwise use default
+        const savedBalance = localStorage.getItem('paypost_mock_balance');
+        const initialBalance = savedBalance ? parseFloat(savedBalance) : 10.0;
+        
         this.wallet = {
           address: mockAddress,
-          balance: 10.0, // Mock balance of 10 MOVE tokens
+          balance: initialBalance,
         };
         
         this.user = {
@@ -39,6 +43,9 @@ class MockAuthService {
         this.isAuthenticated = false;
         this.user = null;
         this.wallet = null;
+        
+        // Clear persisted balance
+        localStorage.removeItem('paypost_mock_balance');
         
         // Don't show notification here - let the calling component handle it
         resolve();
@@ -82,6 +89,9 @@ class MockAuthService {
   addBalance(amount) {
     if (this.wallet) {
       this.wallet.balance += amount;
+      // Persist to localStorage
+      localStorage.setItem('paypost_mock_balance', this.wallet.balance.toString());
+      console.log(`💰 Mock wallet: Added ${amount} MOVE. New balance: ${this.wallet.balance}`);
     }
   }
 
@@ -89,8 +99,12 @@ class MockAuthService {
   deductBalance(amount) {
     if (this.wallet && this.wallet.balance >= amount) {
       this.wallet.balance -= amount;
+      // Persist to localStorage
+      localStorage.setItem('paypost_mock_balance', this.wallet.balance.toString());
+      console.log(`💸 Mock wallet: Deducted ${amount} MOVE. New balance: ${this.wallet.balance}`);
       return true;
     }
+    console.warn(`⚠️ Mock wallet: Insufficient balance. Tried to deduct ${amount}, but only have ${this.wallet?.balance || 0}`);
     return false;
   }
 }

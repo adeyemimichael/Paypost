@@ -17,33 +17,73 @@ class PrivyService {
         throw new Error('Privy not initialized');
       }
 
+      // Login with Privy
       await this.privy.login();
       
       if (this.privy.ready && this.privy.authenticated) {
-        this.wallet = this.privy.user?.wallet;
+        const privyUser = this.privy.user;
+        console.log('Privy user authenticated:', privyUser);
         
-        // Try to get the embedded wallet for signing transactions
-        try {
-          if (this.privy.user?.wallet?.walletClientType === 'privy') {
-            // For embedded wallets, we can sign transactions
+        // Get wallet address from Privy user
+        let walletAddress = null;
+        let walletType = 'embedded';
+        
+        // Check for embedded wallet first
+        if (privyUser?.wallet?.address) {
+          walletAddress = privyUser.wallet.address;
+          walletType = privyUser.wallet.walletClientType || 'embedded';
+        } 
+        // Check linked accounts for external wallets
+        else if (privyUser?.linkedAccounts) {
+          const walletAccount = privyUser.linkedAccounts.find(account => 
+            account.type === 'wallet' || account.type === 'ethereum_wallet'
+          );
+          if (walletAccount?.address) {
+            walletAddress = walletAccount.address;
+            walletType = 'external';
+          }
+        }
+        
+        if (!walletAddress) {
+          throw new Error('No wallet found in Privy user account. Please ensure you have a wallet connected.');
+        }
+        
+        // Validate wallet address format
+        if (!walletAddress.startsWith('0x') || walletAddress.length !== 42) {
+          throw new Error(`Invalid wallet address format: ${walletAddress}`);
+        }
+        
+        this.wallet = {
+          address: walletAddress,
+          type: walletType,
+          balance: 0, // Will be fetched from blockchain
+          canSign: true,
+          ...privyUser?.wallet
+        };
+        
+        console.log('✅ Wallet connected:', {
+          address: walletAddress,
+          type: walletType
+        });
+        
+        // Initialize embedded wallet for signing if available
+        if (walletType === 'embedded' || privyUser?.wallet?.walletClientType === 'privy') {
+          try {
             this.embeddedWallet = await this.privy.getEmbeddedWallet();
             console.log('✅ Embedded wallet initialized for signing');
-          } else {
-            // For external wallets, we'll use a different approach
-            console.log('ℹ️ External wallet detected, will use alternative signing method');
-            this.embeddedWallet = { canSign: true }; // Mark as capable
+          } catch (walletError) {
+            console.warn('⚠️ Could not initialize embedded wallet:', walletError);
+            // For embedded wallets, this is a real issue
+            throw new Error('Failed to initialize embedded wallet for signing');
           }
-        } catch (walletError) {
-          console.warn('⚠️ Could not initialize embedded wallet, using fallback:', walletError);
-          // Fallback: assume we can sign (will handle errors during actual signing)
-          this.embeddedWallet = { canSign: true };
         }
         
         return this.wallet;
       }
       
-      throw new Error('Failed to authenticate');
+      throw new Error('Privy authentication failed');
     } catch (error) {
+      console.error('❌ Privy wallet connection failed:', error);
       throw error;
     }
   }
@@ -54,52 +94,63 @@ class PrivyService {
         await this.privy.logout();
         this.wallet = null;
         this.embeddedWallet = null;
+        console.log('✅ Wallet disconnected');
       }
     } catch (error) {
+      console.error('❌ Failed to disconnect wallet:', error);
       throw error;
     }
   }
 
-  // Updated method to sign and submit transactions
+  // Sign and submit transaction for Movement blockchain
   async signAndSubmitTransaction(transaction) {
     try {
       if (!this.privy || !this.privy.authenticated) {
         throw new Error('Wallet not connected');
       }
 
-      console.log('🔐 Attempting to sign transaction...');
+      if (!this.wallet) {
+        throw new Error('No wallet available');
+      }
+
+      console.log('🔐 Signing transaction with Privy wallet...');
       
-      // Try different signing methods based on wallet type
+      // For embedded wallets, use Privy's signing
       if (this.embeddedWallet && this.embeddedWallet.signTransaction) {
-        // Method 1: Use embedded wallet signing
-        console.log('Using embedded wallet signing...');
+        console.log('Using Privy embedded wallet signing...');
         const signedTransaction = await this.embeddedWallet.signTransaction(transaction);
         return signedTransaction;
-      } else if (this.privy.signTransaction) {
-        // Method 2: Use Privy's direct signing method
-        console.log('Using Privy direct signing...');
-        const signedTransaction = await this.privy.signTransaction(transaction);
-        return signedTransaction;
-      } else {
-        // Method 3: Fallback - return the transaction (will be handled by Aptos SDK)
-        console.log('Using fallback signing method...');
-        return transaction;
+      } 
+      // For external wallets, delegate to Movement wallet service
+      else if (this.wallet.type === 'external') {
+        console.log('External wallet detected, delegating to Movement wallet service...');
+        // Import and use Movement wallet service for external wallets
+        const { movementWalletService } = await import('./nightlyWalletService');
+        
+        if (!movementWalletService.isConnected) {
+          // Try to connect the Movement wallet
+          await movementWalletService.connectWallet('auto');
+        }
+        
+        return await movementWalletService.signAndSubmitTransaction(transaction);
+      }
+      else {
+        throw new Error('No signing method available for this wallet type');
       }
       
     } catch (error) {
-      console.error('❌ Failed to sign transaction:', error);
+      console.error('❌ Transaction signing failed:', error);
       throw new Error(`Transaction signing failed: ${error.message}`);
     }
   }
 
-  // Updated method to check if wallet can sign transactions
   canSignTransactions() {
-    if (!this.privy || !this.privy.authenticated) {
+    if (!this.privy || !this.privy.authenticated || !this.wallet) {
       return false;
     }
     
-    // More lenient check - if we have a connected wallet, assume we can try to sign
-    return !!(this.wallet || this.embeddedWallet);
+    // Check if we have a signing method available
+    return !!(this.embeddedWallet || this.wallet.type === 'external');
   }
 
   getWalletAddress() {
@@ -107,16 +158,24 @@ class PrivyService {
   }
 
   isConnected() {
-    return this.privy?.ready && this.privy?.authenticated;
+    return this.privy?.ready && this.privy?.authenticated && !!this.wallet;
   }
 
   getUser() {
-    return this.privy?.user || null;
+    const privyUser = this.privy?.user;
+    if (!privyUser) return null;
+    
+    return {
+      id: privyUser.id,
+      email: privyUser.email?.address || `user@paypost.xyz`,
+      wallet: this.wallet,
+      createdAt: privyUser.createdAt,
+      ...privyUser
+    };
   }
 
   getBalance() {
-    // In real implementation, would fetch balance from Privy wallet
-    return 0;
+    return this.wallet?.balance || 0;
   }
 }
 

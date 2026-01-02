@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -6,24 +6,27 @@ import {
   Trash2, 
   DollarSign, 
   Users, 
-  Clock, 
   FileText,
   AlertCircle,
   CheckCircle,
-  Wallet
+  Wallet,
+  Upload,
+  X
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
-import { movementService } from '../services/movementService';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
 import WalletBalance from '../components/WalletBalance';
+import MovementWalletPrompt from '../components/MovementWalletPrompt';
 import { notify } from '../utils/notify';
 
 const CreateSurveyPage = () => {
   const navigate = useNavigate();
-  const { getWalletAddress, isCreator } = useUserStore();
+  const { getWalletAddress, isCreator, canCreateSurveys, requiresDatabaseRegistration } = useUserStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [showWalletPrompt, setShowWalletPrompt] = useState(false);
+  const [showRegistrationWarning, setShowRegistrationWarning] = useState(false);
   
   const [surveyData, setSurveyData] = useState({
     title: '',
@@ -31,6 +34,7 @@ const CreateSurveyPage = () => {
     rewardAmount: 0.1,
     maxResponses: 100,
     durationDays: 7,
+    image: null, // Add image field
     questions: [
       {
         id: 1,
@@ -42,10 +46,24 @@ const CreateSurveyPage = () => {
   });
 
   const walletAddress = getWalletAddress();
+  const needsRegistration = requiresDatabaseRegistration();
 
-  // Redirect if not creator
+  // Show registration warning if needed
+  useEffect(() => {
+    if (needsRegistration) {
+      setShowRegistrationWarning(true);
+    }
+  }, [needsRegistration]);
+
+  // Redirect if not creator (using useEffect to avoid hooks rule violation)
+  useEffect(() => {
+    if (!isCreator()) {
+      navigate('/feed');
+    }
+  }, [isCreator, navigate]);
+
+  // Don't render if not creator
   if (!isCreator()) {
-    navigate('/feed');
     return null;
   }
 
@@ -172,7 +190,24 @@ const CreateSurveyPage = () => {
       
       // Use the post store's createSurvey method which handles both Supabase and blockchain
       const { createSurvey } = usePostStore.getState();
-      const { user } = useUserStore.getState();
+      const { getDatabaseUserId } = useUserStore.getState();
+      
+      let databaseUserId = getDatabaseUserId();
+      if (!databaseUserId) {
+        // Try to re-register the user in database
+        const { login } = useUserStore.getState();
+        try {
+          console.log('🔄 Re-registering user in database...');
+          await login('creator'); // Re-register as creator
+          databaseUserId = getDatabaseUserId();
+          if (!databaseUserId) {
+            throw new Error('Database registration failed');
+          }
+          console.log('✅ User re-registered successfully');
+        } catch (regError) {
+          throw new Error('User not properly registered in database. Please disconnect and reconnect your wallet, or check your internet connection.');
+        }
+      }
       
       const result = await createSurvey({
         title: surveyData.title,
@@ -186,7 +221,7 @@ const CreateSurveyPage = () => {
           options: q.options,
           required: true
         }))
-      }, walletAddress, user?.id);
+      }, walletAddress, databaseUserId);
 
       if (result.success) {
         notify.success(`Survey created successfully! ID: ${result.surveyId}`);
@@ -194,10 +229,60 @@ const CreateSurveyPage = () => {
       }
     } catch (error) {
       console.error('Failed to create survey:', error);
+      
+      // Check if this is a Movement wallet signing error
+      if (error.message.includes('Movement wallet') || error.message.includes('Real transactions require')) {
+        setShowWalletPrompt(true);
+        return;
+      }
+      
       notify.error(`Failed to create survey: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      notify.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      notify.error('Image size must be less than 5MB');
+      return;
+    }
+
+    try {
+      // For now, create a local URL for preview
+      // In production, you would upload to Supabase storage
+      const imageUrl = URL.createObjectURL(file);
+      setSurveyData(prev => ({ ...prev, image: { file, url: imageUrl } }));
+      notify.success('Image uploaded successfully');
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      notify.error('Failed to upload image');
+    }
+  };
+
+  const removeImage = () => {
+    if (surveyData.image?.url) {
+      URL.revokeObjectURL(surveyData.image.url);
+    }
+    setSurveyData(prev => ({ ...prev, image: null }));
+  };
+
+  const handleWalletConnected = async (wallet) => {
+    console.log('✅ Movement wallet connected:', wallet);
+    // Retry survey creation after wallet connection
+    setTimeout(() => {
+      handleSubmit({ preventDefault: () => {} });
+    }, 1000);
   };
 
   return (
@@ -211,6 +296,41 @@ const CreateSurveyPage = () => {
           <p className="text-lg text-gray-600 mb-6">
             Design your survey and set rewards to gather valuable insights from the community
           </p>
+          
+          {/* Registration Warning */}
+          {showRegistrationWarning && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+            >
+              <div className="flex items-center justify-center space-x-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                <div className="text-left">
+                  <div className="text-sm font-medium text-yellow-800">
+                    Database Registration Required
+                  </div>
+                  <div className="text-sm text-yellow-700">
+                    You need to be registered in our database to create surveys. 
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const { login } = useUserStore.getState();
+                          await login('creator');
+                          setShowRegistrationWarning(false);
+                        } catch (error) {
+                          notify.error('Registration failed. Please check your connection.');
+                        }
+                      }}
+                      className="ml-2 underline hover:no-underline"
+                    >
+                      Click here to register
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
           
           {/* Wallet Balance Display */}
           <div className="flex justify-center">
@@ -265,6 +385,48 @@ const CreateSurveyPage = () => {
                   placeholder="Describe what your survey is about and why responses are valuable..."
                   required
                 />
+              </div>
+
+              {/* Image Upload */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Survey Image (Optional)
+                </label>
+                {!surveyData.image ? (
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      id="image-upload"
+                    />
+                    <label htmlFor="image-upload" className="cursor-pointer">
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600">
+                        Click to upload an image or drag and drop
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        PNG, JPG, GIF up to 5MB
+                      </p>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <img
+                      src={surveyData.image.url}
+                      alt="Survey preview"
+                      className="w-full h-48 object-cover rounded-lg border border-gray-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={removeImage}
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -509,13 +671,25 @@ const CreateSurveyPage = () => {
             <Button
               type="submit"
               loading={isLoading}
+              disabled={needsRegistration}
               className="px-8"
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              Create & Fund Survey ({calculateTotalCost().toFixed(2)} MOVE)
+              {needsRegistration 
+                ? 'Registration Required' 
+                : `Create & Fund Survey (${calculateTotalCost().toFixed(2)} MOVE)`
+              }
             </Button>
           </motion.div>
         </form>
+
+        {/* Movement Wallet Prompt */}
+        <MovementWalletPrompt
+          isOpen={showWalletPrompt}
+          onClose={() => setShowWalletPrompt(false)}
+          onSuccess={handleWalletConnected}
+          title="Connect Movement Wallet for Real Transactions"
+        />
       </div>
     </div>
   );

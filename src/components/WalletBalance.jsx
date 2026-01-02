@@ -6,13 +6,14 @@ import { realMovementService } from '../services/realMovementService';
 import { formatTokenAmount } from '../utils/formatters';
 
 const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
-  const { getWalletAddress, getBalance, useMockAuth } = useUserStore();
+  const { getWalletAddress, getBalance, useMockAuth, updateBalance } = useUserStore();
   const [balance, setBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
   const [error, setError] = useState(null);
 
   const walletAddress = getWalletAddress();
+  const storeBalance = getBalance(); // Get balance from store
 
   const fetchBalance = async () => {
     if (!walletAddress) return;
@@ -21,19 +22,29 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
     setError(null);
 
     try {
-      let currentBalance = 0;
+      let currentBalance = storeBalance; // Start with store balance
 
-      if (useMockAuth) {
-        // Use mock balance
-        currentBalance = getBalance();
-      } else {
-        // Try to get balance from Movement blockchain
+      if (!useMockAuth) {
+        // Try to get balance from Movement blockchain for real wallets
         try {
           await realMovementService.ensureInitialized();
-          currentBalance = await realMovementService.getAccountBalance(walletAddress);
+          
+          // Get real blockchain balance directly from Movement service
+          const blockchainBalance = await realMovementService.getAccountBalance(walletAddress);
+          
+          if (blockchainBalance !== null && blockchainBalance !== undefined) {
+            // Use blockchain balance if available
+            currentBalance = blockchainBalance;
+            
+            // Update store with blockchain balance if significantly different
+            if (Math.abs(blockchainBalance - storeBalance) > 0.01) {
+              console.log(`💰 Updating balance from blockchain: ${blockchainBalance} MOVE`);
+              updateBalance(blockchainBalance - storeBalance);
+            }
+          }
         } catch (blockchainError) {
-          console.warn('Failed to get blockchain balance, using mock:', blockchainError);
-          currentBalance = getBalance();
+          console.warn('Failed to get blockchain balance, using store balance:', blockchainError);
+          // Use store balance as fallback
         }
       }
 
@@ -41,11 +52,16 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
     } catch (err) {
       console.error('Failed to fetch balance:', err);
       setError('Failed to load balance');
-      setBalance(0);
+      setBalance(storeBalance); // Fallback to store balance
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Update balance when store balance changes
+  useEffect(() => {
+    setBalance(storeBalance);
+  }, [storeBalance]);
 
   useEffect(() => {
     if (walletAddress) {

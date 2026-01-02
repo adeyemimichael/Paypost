@@ -189,6 +189,11 @@ export const usePostStore = create((set, get) => ({
     try {
       console.log('🔨 Creating survey...', { surveyData, walletAddress, userId, useSupabase });
       
+      // Calculate total cost (rewards + platform fee)
+      const totalRewards = surveyData.rewardAmount * surveyData.maxResponses;
+      const platformFee = totalRewards * 0.025; // 2.5% platform fee
+      const totalCost = totalRewards + platformFee;
+      
       let dbSurvey = null;
       
       if (useSupabase && userId) {
@@ -212,18 +217,30 @@ export const usePostStore = create((set, get) => ({
       const blockchainResult = await realMovementService.createSurvey(surveyData, walletAddress);
       console.log('✅ Survey created on blockchain:', blockchainResult);
       
-      if (useSupabase && dbSurvey && blockchainResult.success) {
-        // 4. Update Supabase with blockchain ID
-        console.log('🔗 Linking Supabase survey to blockchain...');
-        await supabaseService.updateSurvey(dbSurvey.id, {
-          blockchain_id: blockchainResult.surveyId
-        });
-        console.log('✅ Survey linked to blockchain');
+      if (blockchainResult.success) {
+        // 4. Update creator's balance (deduct cost)
+        try {
+          const { useUserStore } = await import('./userStore');
+          const { updateBalance } = useUserStore.getState();
+          await updateBalance(-totalCost);
+          console.log(`💰 Deducted ${totalCost} MOVE from creator balance`);
+        } catch (balanceError) {
+          console.warn('⚠️ Failed to update creator balance:', balanceError);
+        }
+        
+        if (useSupabase && dbSurvey) {
+          // 5. Update Supabase with blockchain ID
+          console.log('🔗 Linking Supabase survey to blockchain...');
+          await supabaseService.updateSurvey(dbSurvey.id, {
+            blockchain_id: blockchainResult.surveyId
+          });
+          console.log('✅ Survey linked to blockchain');
+        }
+        
+        // 6. Reload surveys to show the new one
+        console.log('🔄 Refreshing survey list...');
+        await get().loadSurveys();
       }
-      
-      // 5. Reload surveys to show the new one
-      console.log('🔄 Refreshing survey list...');
-      await get().loadSurveys();
       
       set({ isLoading: false });
       return { 
@@ -233,7 +250,7 @@ export const usePostStore = create((set, get) => ({
         isSimulated: blockchainResult.isSimulated
       };
     } catch (error) {
-      console.error('❌ Failed to create survey:', error);
+      console.error(' Failed to create survey:', error);
       set({ isLoading: false });
       throw error;
     }
@@ -259,21 +276,32 @@ export const usePostStore = create((set, get) => ({
       // 1. Complete on blockchain
       const blockchainId = post.blockchainId || postId;
       const result = await realMovementService.completeSurvey(blockchainId, responses, walletAddress);
-      console.log('✅ Survey completed on blockchain:', result);
+      console.log('Survey completed on blockchain:', result);
       
       if (result.success) {
-        // 2. Save to Supabase if available
+        // 2. Update participant's balance (add reward)
+        try {
+          const { useUserStore } = await import('./userStore');
+          const { updateBalance } = useUserStore.getState();
+          const rewardAmount = result.reward || post.reward;
+          await updateBalance(rewardAmount);
+          console.log(`💰 Added ${rewardAmount} MOVE to participant balance`);
+        } catch (balanceError) {
+          console.warn('⚠️ Failed to update participant balance:', balanceError);
+        }
+        
+        // 3. Save to Supabase if available
         if (useSupabase && userId) {
           try {
             await supabaseService.saveResponse(postId, userId, responses, result.txHash);
-            console.log('✅ Response saved to Supabase');
+            console.log(' Response saved to Supabase');
           } catch (dbError) {
             console.warn('⚠️ Failed to save response to database:', dbError);
             // Continue anyway - blockchain transaction succeeded
           }
         }
         
-        // 3. Update local state
+        // 4. Update local state
         const newCompletedSurveys = new Set(completedSurveys);
         newCompletedSurveys.add(postId);
         
@@ -299,7 +327,7 @@ export const usePostStore = create((set, get) => ({
       
       throw new Error('Transaction failed');
     } catch (error) {
-      console.error('❌ Failed to complete survey:', error);
+      console.error(' Failed to complete survey:', error);
       set({ isLoading: false });
       throw error;
     }

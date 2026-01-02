@@ -4,9 +4,9 @@ import { notify } from '../utils/notify';
 class RealMovementService {
   constructor() {
     this.aptos = null;
-    this.contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
+    this.contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS || null;
     this.initialized = false;
-    this.isSimulationMode = true; // Will be set to false when real wallet integration is ready
+    this.isSimulationMode = false; // ✅ ENABLE REAL TRANSACTIONS
   }
 
   async initialize() {
@@ -16,10 +16,12 @@ class RealMovementService {
         throw new Error('VITE_MOVEMENT_RPC_URL not configured');
       }
       
-      if (!import.meta.env.VITE_CONTRACT_ADDRESS) {
-        console.warn('⚠️ VITE_CONTRACT_ADDRESS not configured, using simulation mode');
+      if (!this.contractAddress) {
+        console.warn('⚠️ VITE_CONTRACT_ADDRESS not configured');
         this.contractAddress = '0x1'; // Fallback address
       }
+      
+      console.log('🔧 Contract address:', this.contractAddress);
       
       // Initialize Aptos SDK with Movement testnet configuration
       const config = new AptosConfig({
@@ -31,24 +33,25 @@ class RealMovementService {
       this.aptos = new Aptos(config);
       this.initialized = true;
       
-      console.log('✅ Movement service initialized successfully');
+      console.log('✅ Movement service initialized with real testnet');
+      console.log('🔧 RPC URL:', import.meta.env.VITE_MOVEMENT_RPC_URL);
+      console.log('🔧 Contract address:', this.contractAddress);
       
       // Test contract connection (non-blocking)
       const contractConnected = await this.testContractConnection();
       if (!contractConnected) {
-        console.log('📝 Contract not accessible - using simulation mode for development');
-        this.isSimulationMode = true;
+        console.warn('⚠️ Contract not deployed at configured address');
+        console.warn('📝 App will work with database-only mode until contract is deployed');
+        console.warn('💡 To deploy contract: cd src/smart-contracts && movement move publish');
       }
       
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize Movement service:', error);
       
-      // Don't show error notification for initialization failures
-      // The app should continue to work in simulation mode
-      console.log('📝 Continuing in simulation mode due to initialization error');
-      this.isSimulationMode = true;
-      this.initialized = true; // Allow app to continue
+      // For real transactions, we need to fail properly
+      console.error('🚨 Real transaction mode requires proper initialization');
+      this.initialized = false;
       
       return false;
     }
@@ -57,7 +60,11 @@ class RealMovementService {
   async testContractConnection() {
     try {
       // Validate contract address format first
-      if (!this.contractAddress || !this.contractAddress.startsWith('0x')) {
+      if (!this.contractAddress || typeof this.contractAddress !== 'string') {
+        throw new Error(`Contract address is not defined or not a string: ${this.contractAddress}`);
+      }
+      
+      if (!this.contractAddress.startsWith('0x')) {
         throw new Error(`Invalid contract address format: ${this.contractAddress}`);
       }
       
@@ -72,8 +79,20 @@ class RealMovementService {
     } catch (error) {
       console.error('❌ Contract connection test failed:', error);
       
-      // Don't throw error, just log it - allow app to continue in simulation mode
-      console.warn('⚠️ Contract not accessible, continuing in simulation mode');
+      // Check if this is a contract not found error vs network error
+      if (error.message && (
+        error.message.includes('FUNCTION_NOT_FOUND') || 
+        error.message.includes('MODULE_NOT_FOUND') ||
+        error.message.includes('not published') ||
+        error.message.includes("doesn't exist") ||
+        error.message.includes('LINKER_ERROR')
+      )) {
+        console.warn('⚠️ Contract not deployed at this address - needs deployment');
+        console.warn('💡 Run: cd src/smart-contracts && movement move publish --named-addresses PayPost=<your-address>');
+      } else if (error.message && error.message.includes('network')) {
+        console.warn('⚠️ Network connection issue - check RPC URL');
+      }
+      
       return false;
     }
   }
@@ -96,19 +115,43 @@ class RealMovementService {
       // Create response hash from survey responses
       const responseHash = this.createResponseHash(responses);
       
-      if (this.isSimulationMode) {
-        // Simulation mode - for development
-        const result = await this.simulateTransaction({
-          function: `${this.contractAddress}::ContentPlatform::complete_survey`,
-          type_arguments: [],
-          arguments: [
-            surveyId.toString(),
-            Array.from(new TextEncoder().encode(responseHash))
-          ]
+      // ALWAYS use real transactions now
+      console.log('🔄 Processing REAL survey completion transaction...');
+      
+      // Use Privy for signing
+      const { privyService } = await import('./privyService');
+      
+      // Check if Privy wallet is connected
+      if (!privyService.isConnected() || !privyService.canSignTransactions()) {
+        notify.update(toastId, {
+          render: 'Please connect your wallet to complete surveys with real MOVE rewards',
+          type: 'error',
+          isLoading: false,
+          autoClose: 5000,
         });
+        throw new Error('Wallet not connected or cannot sign transactions. Please connect your wallet first.');
+      }
+
+      // Build the transaction payload
+      const transactionPayload = {
+        function: `${this.contractAddress}::ContentPlatform::complete_survey`,
+        type_arguments: [],
+        arguments: [
+          surveyId.toString(),
+          Array.from(new TextEncoder().encode(responseHash))
+        ]
+      };
+
+      console.log('📝 Submitting real transaction to Movement blockchain...');
+      
+      // Sign and submit the transaction using Privy
+      const result = await privyService.signAndSubmitTransaction(transactionPayload);
+      
+      if (result && result.hash) {
+        const rewardAmount = this.extractRewardFromEvents(result.events || []);
         
         notify.update(toastId, {
-          render: `✅ Survey completed! Earned ${result.reward} MOVE tokens (Simulated)`,
+          render: `✅ Survey completed! Earned ${rewardAmount} MOVE tokens. TX: ${result.hash.slice(0, 10)}...`,
           type: 'success',
           isLoading: false,
           autoClose: 5000,
@@ -117,58 +160,11 @@ class RealMovementService {
         return { 
           success: true, 
           txHash: result.hash, 
-          reward: result.reward,
-          isSimulated: true
+          reward: rewardAmount,
+          isSimulated: false
         };
       } else {
-        // Real transaction mode
-        const { privyService } = await import('./privyService');
-        
-        if (!privyService.canSignTransactions()) {
-          throw new Error('Wallet cannot sign transactions. Please reconnect your wallet.');
-        }
-
-        // Build the transaction payload
-        const transactionPayload = {
-          function: `${this.contractAddress}::ContentPlatform::complete_survey`,
-          type_arguments: [],
-          arguments: [
-            surveyId.toString(),
-            Array.from(new TextEncoder().encode(responseHash))
-          ]
-        };
-
-        // Sign and submit the transaction
-        const signedTx = await privyService.signAndSubmitTransaction(transactionPayload);
-        
-        // Submit to the blockchain
-        const pendingTransaction = await this.aptos.submitTransaction({
-          senderAddress: walletAddress,
-          transaction: signedTx
-        });
-
-        // Wait for confirmation
-        const confirmedTransaction = await this.aptos.waitForTransaction({
-          transactionHash: pendingTransaction.hash
-        });
-
-        if (confirmedTransaction.success) {
-          notify.update(toastId, {
-            render: `✅ Survey completed! Earned MOVE tokens. TX: ${pendingTransaction.hash.slice(0, 10)}...`,
-            type: 'success',
-            isLoading: false,
-            autoClose: 5000,
-          });
-
-          return { 
-            success: true, 
-            txHash: pendingTransaction.hash, 
-            reward: 0.5, // This would come from the transaction events
-            isSimulated: false
-          };
-        } else {
-          throw new Error('Transaction failed on blockchain');
-        }
+        throw new Error('Transaction failed on blockchain');
       }
     } catch (error) {
       console.error('Failed to complete survey:', error);
@@ -187,38 +183,21 @@ class RealMovementService {
       const durationSeconds = surveyData.durationSeconds || (7 * 24 * 60 * 60);
       
       if (this.isSimulationMode) {
-        // Simulation mode - for development
-        const result = await this.simulateTransaction({
-          function: `${this.contractAddress}::ContentPlatform::create_and_fund_survey`,
-          type_arguments: [],
-          arguments: [
-            Array.from(new TextEncoder().encode(surveyData.title)),
-            Array.from(new TextEncoder().encode(surveyData.description)),
-            (surveyData.rewardAmount * 1000000).toString(), // Convert to micro-MOVE
-            surveyData.maxResponses.toString(),
-            durationSeconds.toString()
-          ]
-        });
-        
-        notify.update(toastId, {
-          render: `✅ Survey created and funded! ID: ${result.surveyId} (Simulated)`,
-          type: 'success',
-          isLoading: false,
-          autoClose: 5000,
-        });
-
-        return { 
-          success: true, 
-          txHash: result.hash, 
-          surveyId: result.surveyId,
-          isSimulated: true
-        };
+        // This should never happen now - we disabled simulation mode
+        throw new Error('Simulation mode is disabled. Real transactions only.');
       } else {
-        // Real transaction mode
+        // Real transaction mode - use Privy for signing
         const { privyService } = await import('./privyService');
         
-        if (!privyService.canSignTransactions()) {
-          throw new Error('Wallet cannot sign transactions. Please reconnect your wallet.');
+        // Check if Privy wallet is connected and can sign
+        if (!privyService.isConnected() || !privyService.canSignTransactions()) {
+          notify.update(toastId, {
+            render: 'Please connect your wallet to create surveys with real MOVE funding',
+            type: 'error',
+            isLoading: false,
+            autoClose: 5000,
+          });
+          throw new Error('Wallet not connected or cannot sign transactions. Please connect your wallet first.');
         }
 
         // Build the transaction payload
@@ -234,50 +213,19 @@ class RealMovementService {
           ]
         };
 
-        try {
-          // Try to sign the transaction
-          const signedTx = await privyService.signAndSubmitTransaction(transactionPayload);
-          
-          // Submit to the blockchain
-          const pendingTransaction = await this.aptos.submitTransaction({
-            senderAddress: walletAddress,
-            transaction: signedTx
-          });
-
-          // Wait for confirmation
-          const confirmedTransaction = await this.aptos.waitForTransaction({
-            transactionHash: pendingTransaction.hash
-          });
-
-          if (confirmedTransaction.success) {
-            // Extract survey ID from transaction events
-            const surveyId = this.extractSurveyIdFromEvents(confirmedTransaction.events);
-            
-            notify.update(toastId, {
-              render: `✅ Survey created and funded! ID: ${surveyId}. TX: ${pendingTransaction.hash.slice(0, 10)}...`,
-              type: 'success',
-              isLoading: false,
-              autoClose: 5000,
-            });
-
-            return { 
-              success: true, 
-              txHash: pendingTransaction.hash, 
-              surveyId: surveyId,
-              isSimulated: false
-            };
-          } else {
-            throw new Error('Transaction failed on blockchain');
-          }
-        } catch (signingError) {
-          console.warn('⚠️ Real transaction failed, falling back to simulation:', signingError);
-          
-          // Fallback to simulation if real transaction fails
-          const result = await this.simulateTransaction(transactionPayload);
+        console.log('📝 Submitting real survey creation to Movement blockchain...');
+        console.log('💰 Total cost:', (surveyData.rewardAmount * surveyData.maxResponses * 1.025), 'MOVE');
+        
+        // Sign and submit the transaction using Privy
+        const result = await privyService.signAndSubmitTransaction(transactionPayload);
+        
+        if (result && result.hash) {
+          // Extract survey ID from transaction events
+          const surveyId = this.extractSurveyIdFromEvents(result.events || []);
           
           notify.update(toastId, {
-            render: `✅ Survey created! ID: ${result.surveyId} (Simulated - Real signing failed)`,
-            type: 'warning',
+            render: `✅ Survey created and funded! ID: ${surveyId}. TX: ${result.hash.slice(0, 10)}...`,
+            type: 'success',
             isLoading: false,
             autoClose: 5000,
           });
@@ -285,10 +233,11 @@ class RealMovementService {
           return { 
             success: true, 
             txHash: result.hash, 
-            surveyId: result.surveyId,
-            isSimulated: true,
-            fallbackReason: signingError.message
+            surveyId: surveyId,
+            isSimulated: false
           };
+        } else {
+          throw new Error('Transaction failed on blockchain');
         }
       }
     } catch (error) {
@@ -301,6 +250,12 @@ class RealMovementService {
   async getCreatorSurveys(walletAddress) {
     try {
       await this.ensureInitialized();
+      
+      // Skip if contract address is invalid
+      if (!this.contractAddress || typeof this.contractAddress !== 'string' || !this.contractAddress.startsWith('0x')) {
+        console.log('📝 Skipping blockchain creator surveys check - invalid contract address');
+        return [];
+      }
       
       const result = await this.aptos.view({
         function: `${this.contractAddress}::ContentPlatform::get_creator_surveys`,
@@ -319,6 +274,12 @@ class RealMovementService {
   async getActiveSurveys() {
     try {
       await this.ensureInitialized();
+      
+      // Skip if contract address is invalid
+      if (!this.contractAddress || typeof this.contractAddress !== 'string' || !this.contractAddress.startsWith('0x')) {
+        console.log('📝 Skipping blockchain active surveys check - invalid contract address');
+        return [];
+      }
       
       const result = await this.aptos.view({
         function: `${this.contractAddress}::ContentPlatform::get_active_surveys`,
@@ -369,10 +330,10 @@ class RealMovementService {
     try {
       await this.ensureInitialized();
       
-      // Skip blockchain check if contract address is invalid or in simulation mode
-      if (!this.contractAddress || !this.contractAddress.startsWith('0x') || this.isSimulationMode) {
-        console.log('📝 Skipping blockchain survey completion check - using simulation mode');
-        return false; // Allow user to attempt in simulation mode
+      // Always check blockchain for real completion status
+      if (!this.contractAddress || typeof this.contractAddress !== 'string' || !this.contractAddress.startsWith('0x')) {
+        console.log('📝 Invalid contract address - cannot check survey completion');
+        return false;
       }
       
       const result = await this.aptos.view({

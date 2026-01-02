@@ -12,35 +12,64 @@ class SupabaseService {
 
   async initialize() {
     try {
-      // Test connection
+      // Test connection with a simple query
+      console.log('🔄 Testing Supabase connection...');
       const { data, error } = await supabase.from('users').select('count').limit(1);
+      
       if (error && error.code !== 'PGRST116') {
         console.warn('Supabase connection test failed:', error.message);
         return false;
       }
+      
+      // Test if we can query the users table structure
+      try {
+        const { data: schemaTest } = await supabase.from('users').select('id, wallet_address, email, role').limit(1);
+        console.log('✅ Database schema accessible');
+      } catch (schemaError) {
+        console.warn('⚠️ Database schema test failed:', schemaError);
+      }
+      
       this.initialized = true;
-      console.log('Supabase service initialized successfully');
+      console.log('✅ Supabase service initialized successfully');
       return true;
     } catch (error) {
-      console.warn('Supabase initialization failed:', error.message);
+      console.warn('❌ Supabase initialization failed:', error.message);
       return false;
     }
   }
 
-  // User Management
-  async createUser(walletAddress, email, role, displayName = null) {
+  async createUser(walletAddress, email, role, displayName = null, privyUserId = null) {
     try {
+      // Validate inputs
+      if (!walletAddress || typeof walletAddress !== 'string') {
+        throw new Error(`Invalid wallet address: ${walletAddress}`);
+      }
+      
+      if (!email || typeof email !== 'string') {
+        throw new Error(`Invalid email: ${email}`);
+      }
+
+      // Create user without privy_user_id column (not available in current schema)
+      const userData = { 
+        wallet_address: walletAddress, 
+        email, 
+        role: role || 'reader',
+        display_name: displayName || `${role}_${walletAddress.slice(0, 8)}`
+      };
+
+      console.log('Creating user with data:', userData);
+
       const { data, error } = await supabase
         .from('users')
-        .insert([{ 
-          wallet_address: walletAddress, 
-          email, 
-          role,
-          display_name: displayName || `${role}_${walletAddress.slice(0, 8)}`
-        }])
+        .insert([userData])
         .select()
       
-      if (error) throw error
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
+      
+      console.log('User created successfully:', data[0]);
       return data[0]
     } catch (error) {
       console.error('Failed to create user:', error);
@@ -48,17 +77,24 @@ class SupabaseService {
     }
   }
 
-  async getOrCreateUser(walletAddress, email = null, role = 'reader') {
+  async getOrCreateUser(walletAddress, email = null, role = 'reader', privyUserId = null) {
     try {
-      // First try to get existing user
+      // First try to get existing user by wallet address
       let user = await this.getUser(walletAddress);
+      
+      // Skip Privy ID lookup since column doesn't exist in current schema
+      // if (!user && privyUserId) {
+      //   user = await this.getUserByPrivyId(privyUserId);
+      // }
       
       if (!user) {
         // Create new user if doesn't exist
         user = await this.createUser(
           walletAddress, 
           email || `${walletAddress}@paypost.xyz`, 
-          role
+          role,
+          null,
+          privyUserId
         );
       }
       
@@ -71,18 +107,49 @@ class SupabaseService {
 
   async getUser(walletAddress) {
     try {
+      // Ensure wallet address is properly formatted
+      if (!walletAddress || typeof walletAddress !== 'string') {
+        console.error('Invalid wallet address:', walletAddress);
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('wallet_address', walletAddress)
         .single()
       
-      if (error && error.code !== 'PGRST116') throw error
+      if (error && error.code !== 'PGRST116') {
+        console.error('Database query error:', error);
+        throw error;
+      }
       return data
     } catch (error) {
       console.error('Failed to get user:', error);
       return null;
     }
+  }
+
+  async getUserByPrivyId(privyUserId) {
+    // This method is disabled since privy_user_id column doesn't exist in current schema
+    console.log('getUserByPrivyId skipped - column not available in current schema');
+    return null;
+    
+    /* 
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('privy_user_id', privyUserId)
+        .single()
+      
+      if (error && error.code !== 'PGRST116') throw error
+      return data
+    } catch (error) {
+      console.error('Failed to get user by Privy ID:', error);
+      return null;
+    }
+    */
   }
 
   async updateUser(walletAddress, updates) {
