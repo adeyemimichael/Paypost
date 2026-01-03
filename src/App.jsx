@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { PrivyProvider, usePrivy } from '@privy-io/react-auth';
+import { PrivyProvider } from '@privy-io/react-auth';
+import { AptosWalletAdapterProvider } from '@aptos-labs/wallet-adapter-react';
 import { ToastContainer } from 'react-toastify';
-import { useUserStore } from './stores/userStore';
+import { useUserStore } from './stores/newUserStore';
 import { usePostStore } from './stores/postStore';
-import { privyService } from './services/privyService';
 import { realMovementService } from './services/realMovementService';
-import Navbar from './components/Navbar';
+import NewNavbar from './components/NewNavbar';
 import TransactionModeToggle from './components/TransactionModeToggle';
 import WalletDebugInfo from './components/WalletDebugInfo';
 import Home from './pages/Home';
@@ -21,9 +21,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
 const AppContent = () => {
-  const { setUser, loadUserRole } = useUserStore();
+  const { loadUserRole } = useUserStore();
   const { initialize: initializePostStore } = usePostStore();
-  const privy = usePrivy();
 
   useEffect(() => {
     // Initialize services
@@ -32,25 +31,12 @@ const AppContent = () => {
     
     // Initialize post store (will check Supabase availability)
     initializePostStore();
-    
-    // Initialize Privy service when component mounts
-    if (privy) {
-      privyService.initialize(privy);
-      
-      // Set user if already authenticated
-      if (privy.ready && privy.authenticated && privy.user) {
-        setUser({
-          ...privy.user,
-          wallet: privy.user.wallet
-        });
-      }
-    }
-  }, [privy?.ready, privy?.authenticated, privy?.user?.id, loadUserRole, initializePostStore]);
+  }, [loadUserRole, initializePostStore]);
 
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        <Navbar />
+        <NewNavbar />
         <main>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -78,11 +64,13 @@ const AppContent = () => {
           theme="light"
         />
         
-        {/* Transaction Mode Toggle - Only show in development */}
-        {import.meta.env.DEV && <TransactionModeToggle />}
-        
-        {/* Wallet Debug Info - Only show in development */}
-        {import.meta.env.DEV && <WalletDebugInfo />}
+        {/* Development Tools */}
+        {import.meta.env.DEV && (
+          <>
+            <TransactionModeToggle />
+            <WalletDebugInfo />
+          </>
+        )}
       </div>
     </Router>
   );
@@ -91,19 +79,25 @@ const AppContent = () => {
 const App = () => {
   const privyAppId = import.meta.env.VITE_PRIVY_APP_ID;
 
+  // Wallet adapters for native Movement wallets
+  const wallets = [];
+
   return (
     <PrivyProvider
       appId={privyAppId}
       config={{
+        // Enable email, Google, and wallet login methods
         loginMethods: ['email', 'google', 'wallet'],
         appearance: {
           theme: 'light',
           accentColor: '#6366f1',
+          walletList: ['metamask', 'coinbase_wallet', 'wallet_connect'],
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
+          requireUserPasswordOnCreate: false,
         },
-        // Configure for Movement blockchain (Aptos-compatible)
+        // Configure supported chains for Movement
         supportedChains: [
           {
             id: 250,
@@ -128,7 +122,7 @@ const App = () => {
             testnet: true,
           },
         ],
-        // Configure external wallets for Movement
+        // Configure external wallets
         externalWallets: {
           coinbaseWallet: {
             connectionOptions: {
@@ -143,7 +137,15 @@ const App = () => {
         },
       }}
     >
-      <AppContent />
+      <AptosWalletAdapterProvider 
+        wallets={wallets}
+        autoConnect={true}
+        onError={(error) => {
+          console.warn('Wallet adapter error:', error);
+        }}
+      >
+        <AppContent />
+      </AptosWalletAdapterProvider>
     </PrivyProvider>
   );
 };

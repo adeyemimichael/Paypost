@@ -13,19 +13,33 @@ import {
   Upload,
   X
 } from 'lucide-react';
-import { useUserStore } from '../stores/userStore';
+import { useUserStore } from '../stores/newUserStore';
 import { usePostStore } from '../stores/postStore';
+import { usePayPostWallet } from '../hooks/usePayPostWallet';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
 import WalletBalance from '../components/WalletBalance';
-import MovementWalletPrompt from '../components/MovementWalletPrompt';
 import { notify } from '../utils/notify';
 
 const CreateSurveyPage = () => {
   const navigate = useNavigate();
-  const { getWalletAddress, isCreator, canCreateSurveys, requiresDatabaseRegistration } = useUserStore();
+  const { 
+    userRole, 
+    isCreator, 
+    canCreateSurveys, 
+    requiresDatabaseRegistration,
+    getBalance 
+  } = useUserStore();
+  
+  const {
+    isConnected,
+    walletAddress,
+    balance,
+    user,
+    signAndSubmitTransaction
+  } = usePayPostWallet();
+  
   const [isLoading, setIsLoading] = useState(false);
-  const [showWalletPrompt, setShowWalletPrompt] = useState(false);
   const [showRegistrationWarning, setShowRegistrationWarning] = useState(false);
   
   const [surveyData, setSurveyData] = useState({
@@ -45,7 +59,6 @@ const CreateSurveyPage = () => {
     ]
   });
 
-  const walletAddress = getWalletAddress();
   const needsRegistration = requiresDatabaseRegistration();
 
   // Show registration warning if needed
@@ -150,8 +163,7 @@ const CreateSurveyPage = () => {
     if (surveyData.maxResponses <= 0) return 'Max responses must be greater than 0';
     
     // Check if user has sufficient balance
-    const { getBalance } = useUserStore.getState();
-    const userBalance = getBalance();
+    const userBalance = balance;
     const totalCost = calculateTotalCost();
     
     if (userBalance < totalCost) {
@@ -193,17 +205,39 @@ const CreateSurveyPage = () => {
       const { getDatabaseUserId } = useUserStore.getState();
       
       let databaseUserId = getDatabaseUserId();
+      if (!databaseUserId && user?.dbId) {
+        databaseUserId = user.dbId;
+      }
+      
       if (!databaseUserId) {
         // Try to re-register the user in database
-        const { login } = useUserStore.getState();
+        const { setUser } = useUserStore.getState();
         try {
-          console.log('🔄 Re-registering user in database...');
-          await login('creator'); // Re-register as creator
-          databaseUserId = getDatabaseUserId();
-          if (!databaseUserId) {
-            throw new Error('Database registration failed');
+          console.log('🔄 Registering user in database...');
+          
+          const { supabaseService } = await import('../services/supabaseService');
+          const initialized = await supabaseService.initialize();
+          if (!initialized) {
+            throw new Error('Database service not available');
           }
-          console.log('✅ User re-registered successfully');
+          
+          const dbUser = await supabaseService.getOrCreateUser(
+            walletAddress,
+            user?.email || `${walletAddress.slice(0, 8)}@paypost.xyz`,
+            'creator',
+            user?.id
+          );
+          
+          if (dbUser) {
+            // Update user with database info
+            setUser({
+              ...user,
+              dbId: dbUser.id,
+              dbUser
+            });
+            databaseUserId = dbUser.id;
+            console.log('✅ User registered successfully');
+          }
         } catch (regError) {
           throw new Error('User not properly registered in database. Please disconnect and reconnect your wallet, or check your internet connection.');
         }
@@ -221,7 +255,7 @@ const CreateSurveyPage = () => {
           options: q.options,
           required: true
         }))
-      }, walletAddress, databaseUserId);
+      }, walletAddress, databaseUserId, signAndSubmitTransaction);
 
       if (result.success) {
         notify.success(`Survey created successfully! ID: ${result.surveyId}`);
@@ -229,13 +263,6 @@ const CreateSurveyPage = () => {
       }
     } catch (error) {
       console.error('Failed to create survey:', error);
-      
-      // Check if this is a Movement wallet signing error
-      if (error.message.includes('Movement wallet') || error.message.includes('Real transactions require')) {
-        setShowWalletPrompt(true);
-        return;
-      }
-      
       notify.error(`Failed to create survey: ${error.message}`);
     } finally {
       setIsLoading(false);
@@ -504,8 +531,7 @@ const CreateSurveyPage = () => {
               
               {/* Balance Warning */}
               {(() => {
-                const { getBalance } = useUserStore.getState();
-                const userBalance = getBalance();
+                const userBalance = balance;
                 const totalCost = calculateTotalCost();
                 
                 if (userBalance < totalCost) {
@@ -682,14 +708,6 @@ const CreateSurveyPage = () => {
             </Button>
           </motion.div>
         </form>
-
-        {/* Movement Wallet Prompt */}
-        <MovementWalletPrompt
-          isOpen={showWalletPrompt}
-          onClose={() => setShowWalletPrompt(false)}
-          onSuccess={handleWalletConnected}
-          title="Connect Movement Wallet for Real Transactions"
-        />
       </div>
     </div>
   );

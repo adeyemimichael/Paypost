@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, Clock, Users, Gift } from 'lucide-react';
-import { useUserStore } from '../stores/userStore';
+import { useUserStore } from '../stores/newUserStore';
 import { usePostStore } from '../stores/postStore';
+import { usePayPostWallet } from '../hooks/usePayPostWallet';
 import { formatPrice } from '../utils/formatters';
 import { scaleIn } from '../animations/fadeIn';
 import Button from './Button';
 
 const SurveyModal = ({ isOpen, onClose, post }) => {
-  const { getWalletAddress } = useUserStore();
+  const { getDatabaseUserId } = useUserStore();
   const { completeSurvey, isLoading } = usePostStore();
+  const { walletAddress, user, signAndSubmitTransaction } = usePayPostWallet();
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState({});
   const [isCompleted, setIsCompleted] = useState(false);
-
-  const walletAddress = getWalletAddress();
 
   // Debug logging
   console.log('SurveyModal props:', { isOpen, post: !!post, walletAddress });
@@ -77,10 +77,9 @@ const SurveyModal = ({ isOpen, onClose, post }) => {
 
   const handleSubmit = async () => {
     try {
-      const { getDatabaseUserId } = useUserStore.getState();
       const databaseUserId = getDatabaseUserId();
       
-      await completeSurvey(post.id, responses, walletAddress, databaseUserId);
+      await completeSurvey(post.id, responses, walletAddress, databaseUserId, signAndSubmitTransaction);
       setIsCompleted(true);
     } catch (error) {
       console.error('Failed to complete survey:', error);

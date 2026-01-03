@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, PenTool, ArrowRight, CheckCircle } from 'lucide-react';
-import { useUserStore } from '../stores/userStore';
+import { useUserStore } from '../stores/newUserStore';
+import { usePayPostWallet } from '../hooks/usePayPostWallet';
 import { scaleIn } from '../animations/fadeIn';
 import Button from './Button';
+import WalletSelector from './WalletSelector';
 
 const RoleSelectionModal = ({ isOpen, onClose }) => {
-  const { login, isLoading } = useUserStore();
+  const { setUserRole, setUser, isLoading } = useUserStore();
+  const { isConnected, user } = usePayPostWallet();
   const [selectedRole, setSelectedRole] = useState(null);
+  const [step, setStep] = useState('role'); // 'role' or 'wallet'
 
   const roles = [
     {
@@ -45,11 +49,30 @@ const RoleSelectionModal = ({ isOpen, onClose }) => {
   const handleContinue = async () => {
     if (!selectedRole) return;
     
+    if (step === 'role') {
+      setStep('wallet');
+      return;
+    }
+    
+    // If wallet is already connected, complete the setup
+    if (isConnected && user) {
+      try {
+        setUserRole(selectedRole);
+        setUser(user);
+        onClose();
+      } catch (error) {
+        console.error('Failed to set user role:', error);
+      }
+    }
+  };
+
+  const handleWalletConnected = (walletUser) => {
     try {
-      await login(selectedRole);
+      setUserRole(selectedRole);
+      setUser(walletUser);
       onClose();
     } catch (error) {
-      console.error('Failed to login:', error);
+      console.error('Failed to complete setup:', error);
     }
   };
 
@@ -77,10 +100,13 @@ const RoleSelectionModal = ({ isOpen, onClose }) => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Choose Your Role
+                  {step === 'role' ? 'Choose Your Role' : 'Connect Your Wallet'}
                 </h2>
                 <p className="text-gray-600 dark:text-gray-300 mt-1">
-                  How would you like to participate in PayPost?
+                  {step === 'role' 
+                    ? 'How would you like to participate in PayPost?'
+                    : 'Select a wallet to get started with PayPost'
+                  }
                 </p>
               </div>
               <button
@@ -91,84 +117,102 @@ const RoleSelectionModal = ({ isOpen, onClose }) => {
               </button>
             </div>
 
-            {/* Role Cards */}
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
-              {roles.map((role) => (
-                <motion.div
-                  key={role.id}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleRoleSelect(role.id)}
-                  className={`
-                    relative p-6 rounded-xl border-2 cursor-pointer transition-all
-                    ${selectedRole === role.id
-                      ? `border-${role.color}-500 bg-${role.color}-50 dark:bg-${role.color}-900/20`
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                    }
-                  `}
-                >
-                  {/* Selection Indicator */}
-                  {selectedRole === role.id && (
+            {/* Content */}
+            {step === 'role' ? (
+              <>
+                {/* Role Cards */}
+                <div className="grid md:grid-cols-2 gap-6 mb-8">
+                  {roles.map((role) => (
                     <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className={`absolute top-4 right-4 w-6 h-6 bg-${role.color}-500 rounded-full flex items-center justify-center`}
+                      key={role.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleRoleSelect(role.id)}
+                      className={`
+                        relative p-6 rounded-xl border-2 cursor-pointer transition-all
+                        ${selectedRole === role.id
+                          ? `border-${role.color}-500 bg-${role.color}-50 dark:bg-${role.color}-900/20`
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                        }
+                      `}
                     >
-                      <CheckCircle className="w-4 h-4 text-white" />
+                      {/* Selection Indicator */}
+                      {selectedRole === role.id && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className={`absolute top-4 right-4 w-6 h-6 bg-${role.color}-500 rounded-full flex items-center justify-center`}
+                        >
+                          <CheckCircle className="w-4 h-4 text-white" />
+                        </motion.div>
+                      )}
+
+                      {/* Icon */}
+                      <div className={`
+                        w-16 h-16 rounded-lg flex items-center justify-center mb-4
+                        ${selectedRole === role.id
+                          ? `bg-${role.color}-500 text-white`
+                          : `bg-${role.color}-100 dark:bg-${role.color}-900/30 text-${role.color}-600 dark:text-${role.color}-400`
+                        }
+                      `}>
+                        {role.icon}
+                      </div>
+
+                      {/* Content */}
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                        {role.title}
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-300 mb-4">
+                        {role.description}
+                      </p>
+
+                      {/* Benefits */}
+                      <ul className="space-y-2">
+                        {role.benefits.map((benefit, index) => (
+                          <li key={index} className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                            <CheckCircle className={`w-4 h-4 mr-2 text-${role.color}-500`} />
+                            {benefit}
+                          </li>
+                        ))}
+                      </ul>
                     </motion.div>
-                  )}
-
-                  {/* Icon */}
-                  <div className={`
-                    w-16 h-16 rounded-lg flex items-center justify-center mb-4
-                    ${selectedRole === role.id
-                      ? `bg-${role.color}-500 text-white`
-                      : `bg-${role.color}-100 dark:bg-${role.color}-900/30 text-${role.color}-600 dark:text-${role.color}-400`
-                    }
-                  `}>
-                    {role.icon}
-                  </div>
-
-                  {/* Content */}
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    {role.title}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300 mb-4">
-                    {role.description}
-                  </p>
-
-                  {/* Benefits */}
-                  <ul className="space-y-2">
-                    {role.benefits.map((benefit, index) => (
-                      <li key={index} className="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                        <CheckCircle className={`w-4 h-4 mr-2 text-${role.color}-500`} />
-                        {benefit}
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              ))}
-            </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Wallet Selection */}
+                <div className="mb-8">
+                  <WalletSelector 
+                    userRole={selectedRole}
+                    onWalletConnected={handleWalletConnected}
+                    showRoleInfo={false}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Action Buttons */}
             <div className="flex justify-between">
               <Button
                 variant="outline"
-                onClick={onClose}
+                onClick={step === 'wallet' ? () => setStep('role') : onClose}
                 disabled={isLoading}
               >
-                Cancel
+                {step === 'wallet' ? 'Back' : 'Cancel'}
               </Button>
               
-              <Button
-                onClick={handleContinue}
-                disabled={!selectedRole || isLoading}
-                loading={isLoading}
-                className="px-8"
-              >
-                Continue as {selectedRole === 'creator' ? 'Creator' : 'Participant'}
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
+              {step === 'role' && (
+                <Button
+                  onClick={handleContinue}
+                  disabled={!selectedRole || isLoading}
+                  loading={isLoading}
+                  className="px-8"
+                >
+                  Continue as {selectedRole === 'creator' ? 'Creator' : 'Participant'}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              )}
             </div>
 
             {/* Note */}

@@ -1,83 +1,38 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Wallet, RefreshCw, Eye, EyeOff } from 'lucide-react';
-import { useUserStore } from '../stores/userStore';
-import { realMovementService } from '../services/realMovementService';
+import { usePayPostWallet } from '../hooks/usePayPostWallet';
 import { formatTokenAmount } from '../utils/formatters';
 
 const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
-  const { getWalletAddress, getBalance, useMockAuth, updateBalance } = useUserStore();
-  const [balance, setBalance] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  const { 
+    isConnected, 
+    balance, 
+    isLoading: walletLoading, 
+    fetchBalance 
+  } = usePayPostWallet();
+  
   const [showBalance, setShowBalance] = useState(true);
-  const [error, setError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const walletAddress = getWalletAddress();
-  const storeBalance = getBalance(); // Get balance from store
-
-  const fetchBalance = async () => {
-    if (!walletAddress) return;
-
-    setIsLoading(true);
-    setError(null);
-
+  const handleRefresh = async () => {
+    if (isRefreshing || !isConnected) return;
+    
+    setIsRefreshing(true);
     try {
-      let currentBalance = storeBalance; // Start with store balance
-
-      if (!useMockAuth) {
-        // Try to get balance from Movement blockchain for real wallets
-        try {
-          await realMovementService.ensureInitialized();
-          
-          // Get real blockchain balance directly from Movement service
-          const blockchainBalance = await realMovementService.getAccountBalance(walletAddress);
-          
-          if (blockchainBalance !== null && blockchainBalance !== undefined) {
-            // Use blockchain balance if available
-            currentBalance = blockchainBalance;
-            
-            // Update store with blockchain balance if significantly different
-            if (Math.abs(blockchainBalance - storeBalance) > 0.01) {
-              console.log(`💰 Updating balance from blockchain: ${blockchainBalance} MOVE`);
-              updateBalance(blockchainBalance - storeBalance);
-            }
-          }
-        } catch (blockchainError) {
-          console.warn('Failed to get blockchain balance, using store balance:', blockchainError);
-          // Use store balance as fallback
-        }
-      }
-
-      setBalance(currentBalance);
-    } catch (err) {
-      console.error('Failed to fetch balance:', err);
-      setError('Failed to load balance');
-      setBalance(storeBalance); // Fallback to store balance
+      await fetchBalance();
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
     } finally {
-      setIsLoading(false);
+      setIsRefreshing(false);
     }
-  };
-
-  // Update balance when store balance changes
-  useEffect(() => {
-    setBalance(storeBalance);
-  }, [storeBalance]);
-
-  useEffect(() => {
-    if (walletAddress) {
-      fetchBalance();
-    }
-  }, [walletAddress, useMockAuth]);
-
-  const handleRefresh = () => {
-    fetchBalance();
   };
 
   const toggleBalanceVisibility = () => {
     setShowBalance(!showBalance);
   };
 
-  if (!walletAddress) {
+  if (!isConnected) {
     return null;
   }
 
@@ -92,6 +47,8 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
     md: 'w-4 h-4',
     lg: 'w-5 h-5'
   };
+
+  const isLoading = walletLoading || isRefreshing;
 
   return (
     <motion.div
@@ -119,8 +76,6 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
           >
             <RefreshCw className={`${iconSizes[size]} text-movement-500`} />
           </motion.div>
-        ) : error ? (
-          <span className="text-red-500 text-xs">Error</span>
         ) : (
           <span className="font-bold text-movement-700 dark:text-movement-300">
             {showBalance ? formatTokenAmount(balance) : '••••'} MOVE

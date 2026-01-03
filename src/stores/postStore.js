@@ -182,7 +182,7 @@ export const usePostStore = create((set, get) => ({
   },
 
   // Create a new survey (Supabase + Blockchain)
-  createSurvey: async (surveyData, walletAddress, userId) => {
+  createSurvey: async (surveyData, walletAddress, userId, signAndSubmitTransaction) => {
     const { useSupabase } = get();
     set({ isLoading: true });
     
@@ -214,13 +214,13 @@ export const usePostStore = create((set, get) => ({
       
       // 3. Create on blockchain
       console.log('⛓️ Creating survey on blockchain...');
-      const blockchainResult = await realMovementService.createSurvey(surveyData, walletAddress);
+      const blockchainResult = await realMovementService.createSurvey(surveyData, walletAddress, signAndSubmitTransaction);
       console.log('✅ Survey created on blockchain:', blockchainResult);
       
       if (blockchainResult.success) {
         // 4. Update creator's balance (deduct cost)
         try {
-          const { useUserStore } = await import('./userStore');
+          const { useUserStore } = await import('./newUserStore');
           const { updateBalance } = useUserStore.getState();
           await updateBalance(-totalCost);
           console.log(`💰 Deducted ${totalCost} MOVE from creator balance`);
@@ -250,7 +250,7 @@ export const usePostStore = create((set, get) => ({
         isSimulated: blockchainResult.isSimulated
       };
     } catch (error) {
-      console.error(' Failed to create survey:', error);
+      console.error('❌ Failed to create survey:', error);
       set({ isLoading: false });
       throw error;
     }
@@ -260,7 +260,7 @@ export const usePostStore = create((set, get) => ({
   
   setLoading: (isLoading) => set({ isLoading }),
   
-  completeSurvey: async (postId, responses, walletAddress, userId = null) => {
+  completeSurvey: async (postId, responses, walletAddress, userId = null, signAndSubmitTransaction) => {
     const { posts, completedSurveys, useSupabase } = get();
     const post = posts.find(p => p.id === postId);
     
@@ -275,13 +275,13 @@ export const usePostStore = create((set, get) => ({
       
       // 1. Complete on blockchain
       const blockchainId = post.blockchainId || postId;
-      const result = await realMovementService.completeSurvey(blockchainId, responses, walletAddress);
+      const result = await realMovementService.completeSurvey(blockchainId, responses, walletAddress, signAndSubmitTransaction);
       console.log('Survey completed on blockchain:', result);
       
       if (result.success) {
         // 2. Update participant's balance (add reward)
         try {
-          const { useUserStore } = await import('./userStore');
+          const { useUserStore } = await import('./newUserStore');
           const { updateBalance } = useUserStore.getState();
           const rewardAmount = result.reward || post.reward;
           await updateBalance(rewardAmount);
@@ -294,7 +294,7 @@ export const usePostStore = create((set, get) => ({
         if (useSupabase && userId) {
           try {
             await supabaseService.saveResponse(postId, userId, responses, result.txHash);
-            console.log(' Response saved to Supabase');
+            console.log('✅ Response saved to Supabase');
           } catch (dbError) {
             console.warn('⚠️ Failed to save response to database:', dbError);
             // Continue anyway - blockchain transaction succeeded
@@ -327,7 +327,7 @@ export const usePostStore = create((set, get) => ({
       
       throw new Error('Transaction failed');
     } catch (error) {
-      console.error(' Failed to complete survey:', error);
+      console.error('❌ Failed to complete survey:', error);
       set({ isLoading: false });
       throw error;
     }

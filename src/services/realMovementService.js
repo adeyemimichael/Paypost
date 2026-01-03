@@ -106,7 +106,7 @@ class RealMovementService {
     }
   }
 
-  async completeSurvey(surveyId, responses, walletAddress) {
+  async completeSurvey(surveyId, responses, walletAddress, signAndSubmitTransaction) {
     try {
       await this.ensureInitialized();
       
@@ -118,11 +118,8 @@ class RealMovementService {
       // ALWAYS use real transactions now
       console.log('🔄 Processing REAL survey completion transaction...');
       
-      // Use Privy for signing
-      const { privyService } = await import('./privyService');
-      
-      // Check if Privy wallet is connected
-      if (!privyService.isConnected() || !privyService.canSignTransactions()) {
+      // Check if wallet can sign transactions
+      if (!signAndSubmitTransaction) {
         notify.update(toastId, {
           render: 'Please connect your wallet to complete surveys with real MOVE rewards',
           type: 'error',
@@ -144,8 +141,8 @@ class RealMovementService {
 
       console.log('📝 Submitting real transaction to Movement blockchain...');
       
-      // Sign and submit the transaction using Privy
-      const result = await privyService.signAndSubmitTransaction(transactionPayload);
+      // Sign and submit the transaction using the unified wallet hook
+      const result = await signAndSubmitTransaction(transactionPayload);
       
       if (result && result.hash) {
         const rewardAmount = this.extractRewardFromEvents(result.events || []);
@@ -173,7 +170,7 @@ class RealMovementService {
     }
   }
 
-  async createSurvey(surveyData, walletAddress) {
+  async createSurvey(surveyData, walletAddress, signAndSubmitTransaction) {
     try {
       await this.ensureInitialized();
       
@@ -186,11 +183,10 @@ class RealMovementService {
         // This should never happen now - we disabled simulation mode
         throw new Error('Simulation mode is disabled. Real transactions only.');
       } else {
-        // Real transaction mode - use Privy for signing
-        const { privyService } = await import('./privyService');
+        // Real transaction mode - use unified wallet hook for signing
         
-        // Check if Privy wallet is connected and can sign
-        if (!privyService.isConnected() || !privyService.canSignTransactions()) {
+        // Check if wallet can sign transactions
+        if (!signAndSubmitTransaction) {
           notify.update(toastId, {
             render: 'Please connect your wallet to create surveys with real MOVE funding',
             type: 'error',
@@ -216,8 +212,8 @@ class RealMovementService {
         console.log('📝 Submitting real survey creation to Movement blockchain...');
         console.log('💰 Total cost:', (surveyData.rewardAmount * surveyData.maxResponses * 1.025), 'MOVE');
         
-        // Sign and submit the transaction using Privy
-        const result = await privyService.signAndSubmitTransaction(transactionPayload);
+        // Sign and submit the transaction using unified wallet hook
+        const result = await signAndSubmitTransaction(transactionPayload);
         
         if (result && result.hash) {
           // Extract survey ID from transaction events

@@ -16,7 +16,7 @@ import {
   Lock
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useUserStore } from '../stores/userStore';
+import { useUserStore } from '../stores/newUserStore';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
 import RoleSelectionModal from '../components/RoleSelectionModal';
