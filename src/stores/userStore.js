@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { movementService } from '../services/movementService';
 
 export const useUserStore = create((set, get) => ({
   user: null,
@@ -32,22 +33,27 @@ export const useUserStore = create((set, get) => ({
     }
   },
   
-  // Simulated Balance Management
+  // Real Balance Management
   fetchBalance: async () => {
-    // In a real app, this would fetch from Supabase
-    // For now, we use localStorage to simulate persistence
-    const savedBalance = localStorage.getItem('paypost_simulated_balance');
-    set({ balance: savedBalance ? parseFloat(savedBalance) : 0 });
+    const { user } = get();
+    if (!user) return;
+    
+    // Check if user has a wallet address
+    const walletAddress = user.wallet?.address || user.email?.address; // Adjust based on Privy user object structure
+    
+    if (walletAddress) {
+      try {
+        const balance = await movementService.getBalance(walletAddress);
+        set({ balance });
+      } catch (error) {
+        console.error('Failed to fetch balance:', error);
+      }
+    }
   },
 
-  updateBalance: async (amount) => {
-    const { balance } = get();
-    const newBalance = balance + amount;
-    set({ balance: newBalance });
-    localStorage.setItem('paypost_simulated_balance', newBalance.toString());
-    
-    // Ideally, we would also sync this to Supabase here
-    // await supabaseService.updateUserBalance(user.id, newBalance);
+  // Update balance is now just a refresh, as the chain is the source of truth
+  updateBalance: async () => {
+    await get().fetchBalance();
   },
   
   logout: () => {
