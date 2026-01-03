@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { usePrivy } from '@privy-io/react-auth';
 import { 
   Plus, 
   Trash2, 
@@ -13,9 +14,8 @@ import {
   Upload,
   X
 } from 'lucide-react';
-import { useUserStore } from '../stores/newUserStore';
+import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
-import { usePayPostWallet } from '../hooks/usePayPostWallet';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
 import WalletBalance from '../components/WalletBalance';
@@ -23,24 +23,14 @@ import { notify } from '../utils/notify';
 
 const CreateSurveyPage = () => {
   const navigate = useNavigate();
+  const { user, authenticated } = usePrivy();
   const { 
     userRole, 
     isCreator, 
-    canCreateSurveys, 
-    requiresDatabaseRegistration,
-    getBalance 
+    balance 
   } = useUserStore();
   
-  const {
-    isConnected,
-    walletAddress,
-    balance,
-    user,
-    signAndSubmitTransaction
-  } = usePayPostWallet();
-  
   const [isLoading, setIsLoading] = useState(false);
-  const [showRegistrationWarning, setShowRegistrationWarning] = useState(false);
   
   const [surveyData, setSurveyData] = useState({
     title: '',
@@ -48,7 +38,7 @@ const CreateSurveyPage = () => {
     rewardAmount: 0.1,
     maxResponses: 100,
     durationDays: 7,
-    image: null, // Add image field
+    image: null,
     questions: [
       {
         id: 1,
@@ -59,23 +49,13 @@ const CreateSurveyPage = () => {
     ]
   });
 
-  const needsRegistration = requiresDatabaseRegistration();
-
-  // Show registration warning if needed
-  useEffect(() => {
-    if (needsRegistration) {
-      setShowRegistrationWarning(true);
-    }
-  }, [needsRegistration]);
-
-  // Redirect if not creator (using useEffect to avoid hooks rule violation)
+  // Redirect if not creator
   useEffect(() => {
     if (!isCreator()) {
       navigate('/feed');
     }
   }, [isCreator, navigate]);
 
-  // Don't render if not creator
   if (!isCreator()) {
     return null;
   }
@@ -162,7 +142,6 @@ const CreateSurveyPage = () => {
     if (surveyData.rewardAmount <= 0) return 'Reward amount must be greater than 0';
     if (surveyData.maxResponses <= 0) return 'Max responses must be greater than 0';
     
-    // Check if user has sufficient balance
     const userBalance = balance;
     const totalCost = calculateTotalCost();
     
@@ -190,7 +169,7 @@ const CreateSurveyPage = () => {
       return;
     }
 
-    if (!walletAddress) {
+    if (!authenticated) {
       notify.error('Please connect your wallet first');
       return;
     }
@@ -198,50 +177,22 @@ const CreateSurveyPage = () => {
     setIsLoading(true);
     
     try {
+      // Ensure user exists in Supabase and get their UUID
+      const { supabaseService } = await import('../services/supabaseService');
+      const dbUser = await supabaseService.getOrCreateUser(
+        user?.wallet?.address || user?.email?.address || 'unknown_user',
+        user?.email?.address,
+        userRole,
+        user?.id // Pass Privy ID for reference if needed later
+      );
+
+      if (!dbUser || !dbUser.id) {
+        throw new Error('Failed to retrieve user ID from database');
+      }
+
       const durationSeconds = surveyData.durationDays * 24 * 60 * 60;
       
-      // Use the post store's createSurvey method which handles both Supabase and blockchain
       const { createSurvey } = usePostStore.getState();
-      const { getDatabaseUserId } = useUserStore.getState();
-      
-      let databaseUserId = getDatabaseUserId();
-      if (!databaseUserId && user?.dbId) {
-        databaseUserId = user.dbId;
-      }
-      
-      if (!databaseUserId) {
-        // Try to re-register the user in database
-        const { setUser } = useUserStore.getState();
-        try {
-          console.log('🔄 Registering user in database...');
-          
-          const { supabaseService } = await import('../services/supabaseService');
-          const initialized = await supabaseService.initialize();
-          if (!initialized) {
-            throw new Error('Database service not available');
-          }
-          
-          const dbUser = await supabaseService.getOrCreateUser(
-            walletAddress,
-            user?.email || `${walletAddress.slice(0, 8)}@paypost.xyz`,
-            'creator',
-            user?.id
-          );
-          
-          if (dbUser) {
-            // Update user with database info
-            setUser({
-              ...user,
-              dbId: dbUser.id,
-              dbUser
-            });
-            databaseUserId = dbUser.id;
-            console.log('✅ User registered successfully');
-          }
-        } catch (regError) {
-          throw new Error('User not properly registered in database. Please disconnect and reconnect your wallet, or check your internet connection.');
-        }
-      }
       
       const result = await createSurvey({
         title: surveyData.title,
@@ -255,10 +206,10 @@ const CreateSurveyPage = () => {
           options: q.options,
           required: true
         }))
-      }, walletAddress, databaseUserId, signAndSubmitTransaction);
+      }, user?.wallet?.address, dbUser.id); // Use dbUser.id (UUID) instead of user.id (DID)
 
       if (result.success) {
-        notify.success(`Survey created successfully! ID: ${result.surveyId}`);
+        notify.success(`Survey created successfully!`);
         navigate('/feed');
       }
     } catch (error) {
@@ -273,21 +224,17 @@ const CreateSurveyPage = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       notify.error('Please select an image file');
       return;
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       notify.error('Image size must be less than 5MB');
       return;
     }
 
     try {
-      // For now, create a local URL for preview
-      // In production, you would upload to Supabase storage
       const imageUrl = URL.createObjectURL(file);
       setSurveyData(prev => ({ ...prev, image: { file, url: imageUrl } }));
       notify.success('Image uploaded successfully');
@@ -304,18 +251,9 @@ const CreateSurveyPage = () => {
     setSurveyData(prev => ({ ...prev, image: null }));
   };
 
-  const handleWalletConnected = async (wallet) => {
-    console.log('✅ Movement wallet connected:', wallet);
-    // Retry survey creation after wallet connection
-    setTimeout(() => {
-      handleSubmit({ preventDefault: () => {} });
-    }, 1000);
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header with Wallet Balance */}
         <motion.div {...fadeIn} className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
             Create New Survey
@@ -324,42 +262,6 @@ const CreateSurveyPage = () => {
             Design your survey and set rewards to gather valuable insights from the community
           </p>
           
-          {/* Registration Warning */}
-          {showRegistrationWarning && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
-            >
-              <div className="flex items-center justify-center space-x-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600" />
-                <div className="text-left">
-                  <div className="text-sm font-medium text-yellow-800">
-                    Database Registration Required
-                  </div>
-                  <div className="text-sm text-yellow-700">
-                    You need to be registered in our database to create surveys. 
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const { login } = useUserStore.getState();
-                          await login('creator');
-                          setShowRegistrationWarning(false);
-                        } catch (error) {
-                          notify.error('Registration failed. Please check your connection.');
-                        }
-                      }}
-                      className="ml-2 underline hover:no-underline"
-                    >
-                      Click here to register
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-          
-          {/* Wallet Balance Display */}
           <div className="flex justify-center">
             <div className="bg-gradient-to-r from-green-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg">
               <div className="flex items-center justify-center space-x-3">
@@ -378,7 +280,6 @@ const CreateSurveyPage = () => {
         </motion.div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Basic Information */}
           <motion.div {...slideUp} className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
               <FileText className="w-5 h-5 mr-2 text-blue-500" />
@@ -414,7 +315,6 @@ const CreateSurveyPage = () => {
                 />
               </div>
 
-              {/* Image Upload */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Survey Image (Optional)
@@ -458,7 +358,6 @@ const CreateSurveyPage = () => {
             </div>
           </motion.div>
 
-          {/* Reward Settings */}
           <motion.div {...slideUp} transition={{ delay: 0.1 }} className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
               <DollarSign className="w-5 h-5 mr-2 text-green-500" />
@@ -511,7 +410,6 @@ const CreateSurveyPage = () => {
               </div>
             </div>
 
-            {/* Cost Breakdown */}
             <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <h3 className="font-medium text-blue-900 mb-2">Cost Breakdown</h3>
               <div className="space-y-1 text-sm">
@@ -529,7 +427,6 @@ const CreateSurveyPage = () => {
                 </div>
               </div>
               
-              {/* Balance Warning */}
               {(() => {
                 const userBalance = balance;
                 const totalCost = calculateTotalCost();
@@ -561,7 +458,6 @@ const CreateSurveyPage = () => {
             </div>
           </motion.div>
 
-          {/* Questions */}
           <motion.div {...slideUp} transition={{ delay: 0.2 }} className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center">
@@ -683,7 +579,6 @@ const CreateSurveyPage = () => {
             </div>
           </motion.div>
 
-          {/* Submit */}
           <motion.div {...slideUp} transition={{ delay: 0.3 }} className="flex justify-between">
             <Button
               type="button"
@@ -697,14 +592,10 @@ const CreateSurveyPage = () => {
             <Button
               type="submit"
               loading={isLoading}
-              disabled={needsRegistration}
               className="px-8"
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              {needsRegistration 
-                ? 'Registration Required' 
-                : `Create & Fund Survey (${calculateTotalCost().toFixed(2)} MOVE)`
-              }
+              Create & Fund Survey ({calculateTotalCost().toFixed(2)} MOVE)
             </Button>
           </motion.div>
         </form>

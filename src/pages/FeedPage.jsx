@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Wallet } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
-import { movementService } from '../services/movementService';
 import { fadeIn } from '../animations/fadeIn';
 import Feed from '../components/Feed';
 import EarningsDashboard from '../components/EarningsDashboard';
@@ -13,8 +12,7 @@ const FeedPage = () => {
   const { isAuthenticated, isCreator, login, isLoading } = useUserStore();
 
   useEffect(() => {
-    // Initialize Movement service when component mounts
-    movementService.initialize();
+    // Any necessary initialization can go here
   }, []);
 
   const handleConnect = async () => {

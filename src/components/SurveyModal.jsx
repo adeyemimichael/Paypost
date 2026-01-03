@@ -1,29 +1,28 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { usePrivy } from '@privy-io/react-auth';
 import { X, CheckCircle, Clock, Users, Gift } from 'lucide-react';
-import { useUserStore } from '../stores/newUserStore';
+import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
-import { usePayPostWallet } from '../hooks/usePayPostWallet';
 import { formatPrice } from '../utils/formatters';
 import { scaleIn } from '../animations/fadeIn';
 import Button from './Button';
 
 const SurveyModal = ({ isOpen, onClose, post }) => {
+  const { user } = usePrivy();
   const { getDatabaseUserId } = useUserStore();
   const { completeSurvey, isLoading } = usePostStore();
-  const { walletAddress, user, signAndSubmitTransaction } = usePayPostWallet();
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState({});
   const [isCompleted, setIsCompleted] = useState(false);
 
   // Debug logging
-  console.log('SurveyModal props:', { isOpen, post: !!post, walletAddress });
+  console.log('SurveyModal props:', { isOpen, post: !!post });
   if (post) {
     console.log('Post questions:', post.questions);
   }
 
   if (!isOpen || !post) {
-    console.log('SurveyModal not rendering:', { isOpen, post: !!post });
     return null;
   }
 
@@ -77,9 +76,15 @@ const SurveyModal = ({ isOpen, onClose, post }) => {
 
   const handleSubmit = async () => {
     try {
-      const databaseUserId = getDatabaseUserId();
+      // We can get the DB ID from the store or the user object if we synced it
+      // For now, let's rely on what the store has or what we can derive
+      const databaseUserId = user?.id; // Using Privy ID as fallback/primary for now if getDatabaseUserId is empty
       
-      await completeSurvey(post.id, responses, walletAddress, databaseUserId, signAndSubmitTransaction);
+      // We don't need walletAddress for the simulation if we just use user ID, 
+      // but let's pass it if available for consistency with the store's expectation
+      const walletAddress = user?.wallet?.address || user?.id;
+
+      await completeSurvey(post.id, responses, walletAddress, databaseUserId);
       setIsCompleted(true);
     } catch (error) {
       console.error('Failed to complete survey:', error);

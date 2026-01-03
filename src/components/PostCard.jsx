@@ -25,14 +25,14 @@ import LikeButton from './LikeButton';
 import SurveyModal from './SurveyModal';
 
 const PostCard = ({ post, onComplete }) => {
-  const { isAuthenticated, getWalletAddress, isCreator } = useUserStore();
+  const { isAuthenticated, user, isCreator } = useUserStore();
   const { isSurveyCompleted, isPostUnlocked, checkSurveyCompletion, checkPostAccess, unlockPost, isLoading } = usePostStore();
   const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [hasCompleted, setHasCompleted] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [checking, setChecking] = useState(false);
 
-  const walletAddress = getWalletAddress();
+  const walletAddress = user?.wallet?.address || user?.email?.address;
   const isCompleted = isSurveyCompleted(post.id) || hasCompleted;
   const isUnlocked = isPostUnlocked(post.id) || hasAccess || !post.isPremium;
   const isOwnPost = walletAddress && post.authorAddress === walletAddress;

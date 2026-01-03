@@ -1,14 +1,10 @@
 import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { AptosWalletAdapterProvider } from '@aptos-labs/wallet-adapter-react';
 import { ToastContainer } from 'react-toastify';
-import { useUserStore } from './stores/newUserStore';
+import { useUserStore } from './stores/userStore';
 import { usePostStore } from './stores/postStore';
-import { realMovementService } from './services/realMovementService';
 import NewNavbar from './components/NewNavbar';
-import TransactionModeToggle from './components/TransactionModeToggle';
-import WalletDebugInfo from './components/WalletDebugInfo';
 import Home from './pages/Home';
 import FeedPage from './pages/FeedPage';
 import CreatorsPage from './pages/CreatorsPage';
@@ -26,7 +22,6 @@ const AppContent = () => {
 
   useEffect(() => {
     // Initialize services
-    realMovementService.initialize();
     loadUserRole();
     
     // Initialize post store (will check Supabase availability)
@@ -63,14 +58,6 @@ const AppContent = () => {
           pauseOnHover
           theme="light"
         />
-        
-        {/* Development Tools */}
-        {import.meta.env.DEV && (
-          <>
-            <TransactionModeToggle />
-            <WalletDebugInfo />
-          </>
-        )}
       </div>
     </Router>
   );
@@ -79,73 +66,23 @@ const AppContent = () => {
 const App = () => {
   const privyAppId = import.meta.env.VITE_PRIVY_APP_ID;
 
-  // Wallet adapters for native Movement wallets
-  const wallets = [];
-
   return (
     <PrivyProvider
       appId={privyAppId}
       config={{
-        // Enable email, Google, and wallet login methods
-        loginMethods: ['email', 'google', 'wallet'],
+        // Simple email and social login only
+        loginMethods: ['email', 'google'],
         appearance: {
           theme: 'light',
           accentColor: '#6366f1',
-          walletList: ['metamask', 'coinbase_wallet', 'wallet_connect'],
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
           requireUserPasswordOnCreate: false,
         },
-        // Configure supported chains for Movement
-        supportedChains: [
-          {
-            id: 250,
-            name: 'Movement Testnet',
-            network: 'movement-testnet',
-            nativeCurrency: {
-              name: 'MOVE',
-              symbol: 'MOVE',
-              decimals: 8,
-            },
-            rpcUrls: {
-              default: {
-                http: ['https://testnet.movementnetwork.xyz/v1'],
-              },
-            },
-            blockExplorers: {
-              default: {
-                name: 'Movement Explorer',
-                url: 'https://explorer.movementnetwork.xyz',
-              },
-            },
-            testnet: true,
-          },
-        ],
-        // Configure external wallets
-        externalWallets: {
-          coinbaseWallet: {
-            connectionOptions: {
-              appName: 'PayPost',
-            },
-          },
-          walletConnect: {
-            connectionOptions: {
-              projectId: 'paypost-movement-integration',
-            },
-          },
-        },
       }}
     >
-      <AptosWalletAdapterProvider 
-        wallets={wallets}
-        autoConnect={true}
-        onError={(error) => {
-          console.warn('Wallet adapter error:', error);
-        }}
-      >
-        <AppContent />
-      </AptosWalletAdapterProvider>
+      <AppContent />
     </PrivyProvider>
   );
 };

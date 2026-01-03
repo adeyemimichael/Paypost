@@ -1,22 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Wallet, RefreshCw, Eye, EyeOff } from 'lucide-react';
-import { usePayPostWallet } from '../hooks/usePayPostWallet';
+import { usePrivy } from '@privy-io/react-auth';
+import { useUserStore } from '../stores/userStore';
 import { formatTokenAmount } from '../utils/formatters';
 
 const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
-  const { 
-    isConnected, 
-    balance, 
-    isLoading: walletLoading, 
-    fetchBalance 
-  } = usePayPostWallet();
+  const { authenticated } = usePrivy();
+  const { balance, fetchBalance } = useUserStore();
   
   const [showBalance, setShowBalance] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
-    if (isRefreshing || !isConnected) return;
+    if (isRefreshing || !authenticated) return;
     
     setIsRefreshing(true);
     try {
@@ -32,7 +29,7 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
     setShowBalance(!showBalance);
   };
 
-  if (!isConnected) {
+  if (!authenticated) {
     return null;
   }
 
@@ -47,8 +44,6 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
     md: 'w-4 h-4',
     lg: 'w-5 h-5'
   };
-
-  const isLoading = walletLoading || isRefreshing;
 
   return (
     <motion.div
@@ -69,7 +64,7 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
       )}
       
       <div className="flex items-center space-x-1">
-        {isLoading ? (
+        {isRefreshing ? (
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -98,11 +93,11 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
         
         <button
           onClick={handleRefresh}
-          disabled={isLoading}
+          disabled={isRefreshing}
           className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
           title="Refresh balance"
         >
-          <RefreshCw className={`${iconSizes[size]} ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`${iconSizes[size]} ${isRefreshing ? 'animate-spin' : ''}`} />
         </button>
       </div>
     </motion.div>

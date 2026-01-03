@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { usePrivy } from '@privy-io/react-auth';
 import { X, Users, PenTool, ArrowRight, CheckCircle } from 'lucide-react';
-import { useUserStore } from '../stores/newUserStore';
-import { usePayPostWallet } from '../hooks/usePayPostWallet';
+import { useUserStore } from '../stores/userStore';
 import { scaleIn } from '../animations/fadeIn';
 import Button from './Button';
 import WalletSelector from './WalletSelector';
 
 const RoleSelectionModal = ({ isOpen, onClose }) => {
   const { setUserRole, setUser, isLoading } = useUserStore();
-  const { isConnected, user } = usePayPostWallet();
+  const { authenticated, user } = usePrivy();
   const [selectedRole, setSelectedRole] = useState(null);
   const [step, setStep] = useState('role'); // 'role' or 'wallet'
 
@@ -55,7 +55,7 @@ const RoleSelectionModal = ({ isOpen, onClose }) => {
     }
     
     // If wallet is already connected, complete the setup
-    if (isConnected && user) {
+    if (authenticated && user) {
       try {
         setUserRole(selectedRole);
         setUser(user);
