@@ -8,12 +8,12 @@ import { scaleIn } from '../animations/fadeIn';
 import Button from './Button';
 
 const TipModal = ({ isOpen, onClose, creatorAddress, creatorName }) => {
-  const { getWalletAddress } = useUserStore();
+  const { user } = useUserStore();
   const { tipCreator, isLoading } = usePostStore();
   const [selectedAmount, setSelectedAmount] = useState(0.1);
   const [customAmount, setCustomAmount] = useState('');
 
-  const walletAddress = getWalletAddress();
+  const walletAddress = user?.wallet?.address || user?.email?.address;
   
   const predefinedAmounts = [0.1, 0.5, 1.0, 2.0];
 

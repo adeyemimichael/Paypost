@@ -5,12 +5,12 @@ import { useUserStore } from '../stores/userStore';
 import { notify } from '../utils/notify';
 
 const LikeButton = ({ postId, initialLikes = 0, className = '' }) => {
-  const { isAuthenticated, getWalletAddress } = useUserStore();
+  const { isAuthenticated, user } = useUserStore();
   const [likes, setLikes] = useState(initialLikes);
   const [isLiked, setIsLiked] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  const walletAddress = getWalletAddress();
+  const walletAddress = user?.wallet?.address || user?.email?.address;
 
   // Check if user has already liked this post
   useEffect(() => {
