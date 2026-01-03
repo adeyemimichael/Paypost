@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { 
   Plus, 
   Trash2, 
@@ -24,6 +24,7 @@ import { notify } from '../utils/notify';
 const CreateSurveyPage = () => {
   const navigate = useNavigate();
   const { user, authenticated } = usePrivy();
+  const { wallets } = useWallets();
   const { 
     userRole, 
     isCreator, 
@@ -174,44 +175,76 @@ const CreateSurveyPage = () => {
       return;
     }
 
+    const wallet = wallets[0];
+    if (!wallet) {
+      notify.error('Please connect your wallet to fund the survey');
+      return;
+    }
+
     setIsLoading(true);
     
     try {
-      // Ensure user exists in Supabase and get their UUID
+      // 1. Save to Supabase first (Metadata)
       const { supabaseService } = await import('../services/supabaseService');
       const dbUser = await supabaseService.getOrCreateUser(
         user?.wallet?.address || user?.email?.address || 'unknown_user',
         user?.email?.address,
         userRole,
-        user?.id // Pass Privy ID for reference if needed later
+        user?.id
       );
 
-      if (!dbUser || !dbUser.id) {
-        throw new Error('Failed to retrieve user ID from database');
-      }
+      if (!dbUser || !dbUser.id) throw new Error('Failed to retrieve user ID');
 
-      const durationSeconds = surveyData.durationDays * 24 * 60 * 60;
-      
-      const { createSurvey } = usePostStore.getState();
-      
-      const result = await createSurvey({
+      // Create initial record in Supabase (status: pending_payment)
+      const { data: surveyRecord, error: dbError } = await supabaseService.createSurvey({
         title: surveyData.title,
         description: surveyData.description,
-        rewardAmount: surveyData.rewardAmount,
-        maxResponses: surveyData.maxResponses,
-        durationSeconds,
+        reward_amount: surveyData.rewardAmount,
+        max_responses: surveyData.maxResponses,
         questions: surveyData.questions.map(q => ({
           text: q.question,
           type: q.type,
           options: q.options,
           required: true
-        }))
-      }, user?.wallet?.address, dbUser.id); // Use dbUser.id (UUID) instead of user.id (DID)
+        })),
+        image_url: surveyData.image?.url, // In real app, upload to storage first
+        status: 'pending_payment'
+      }, dbUser.id);
 
-      if (result.success) {
-        notify.success(`Survey created successfully!`);
-        navigate('/feed');
-      }
+      if (dbError) throw dbError;
+      console.log('Survey saved to DB:', surveyRecord);
+
+      // 2. Fund on Blockchain
+      const durationSeconds = surveyData.durationDays * 24 * 60 * 60;
+      const { getCreateSurveyPayload, refreshAfterAction } = usePostStore.getState();
+      
+      const payload = getCreateSurveyPayload(
+        surveyData.title,
+        JSON.stringify({ 
+          description: surveyData.description, 
+          questions: surveyData.questions 
+        }), // Store full metadata in description field on-chain as backup/reference
+        surveyData.rewardAmount,
+        surveyData.maxResponses,
+        durationSeconds
+      );
+
+      // Sign and submit
+      const txHash = await wallet.sendTransaction(payload);
+      console.log("Survey Creation TX:", txHash);
+
+      // 3. Update Supabase with Chain ID and Active Status
+      // We need to wait for the transaction to be indexed to get the ID, 
+      // but for now we can mark it as 'funded' and store the txHash.
+      // Ideally, we'd have an indexer or event listener. 
+      // For this hackathon, we might just set it active.
+      
+      await supabaseService.updateSurveyStatus(surveyRecord[0].id, 'active', txHash);
+
+      notify.success(`Survey created and funded successfully!`);
+      await refreshAfterAction(wallet.address);
+      navigate('/feed');
+
     } catch (error) {
       console.error('Failed to create survey:', error);
       notify.error(`Failed to create survey: ${error.message}`);

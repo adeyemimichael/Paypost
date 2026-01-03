@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { 
   Gift, 
   CheckCircle, 
@@ -26,7 +27,8 @@ import SurveyModal from './SurveyModal';
 
 const PostCard = ({ post, onComplete }) => {
   const { isAuthenticated, user, isCreator } = useUserStore();
-  const { isSurveyCompleted, isPostUnlocked, checkSurveyCompletion, checkPostAccess, unlockPost, isLoading } = usePostStore();
+  const { isSurveyCompleted, isPostUnlocked, checkSurveyCompletion, checkPostAccess, unlockPost, isLoading, getCompleteSurveyPayload, refreshAfterAction } = usePostStore();
+  const { wallets } = useWallets();
   const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [hasCompleted, setHasCompleted] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -65,9 +67,33 @@ const PostCard = ({ post, onComplete }) => {
     setShowSurveyModal(true);
   };
 
-  const handleSurveyComplete = () => {
-    setShowSurveyModal(false);
-    if (onComplete) onComplete(post.id);
+  const handleSurveyComplete = async (responses) => {
+    // This is called when the user finishes the survey in the modal
+    // We need to submit the transaction here
+    
+    const wallet = wallets[0];
+    if (!wallet) {
+      alert("Please connect your wallet to submit.");
+      return;
+    }
+
+    try {
+      const payload = getCompleteSurveyPayload(post.id);
+      
+      // Sign and submit
+      const txHash = await wallet.sendTransaction(payload);
+      console.log("Survey Completion TX:", txHash);
+      
+      // Refresh state
+      await refreshAfterAction(wallet.address);
+      setHasCompleted(true);
+      setShowSurveyModal(false);
+      
+      if (onComplete) onComplete(post.id);
+    } catch (error) {
+      console.error("Failed to submit survey:", error);
+      alert("Failed to submit survey to blockchain. See console.");
+    }
   };
 
   const handleUnlockPost = async () => {
@@ -438,7 +464,8 @@ const PostCard = ({ post, onComplete }) => {
       {!isCreator() && (post.type === 'survey' || post.type === 'poll') && (
         <SurveyModal
           isOpen={showSurveyModal}
-          onClose={handleSurveyComplete}
+          onClose={() => setShowSurveyModal(false)}
+          onSubmit={handleSurveyComplete}
           post={post}
         />
       )}

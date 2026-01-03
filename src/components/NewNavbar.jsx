@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { 
   Menu, 
   X, 
@@ -18,6 +18,7 @@ import {
   Coins
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
+import { useMovementWallet } from '../hooks/useMovementWallet';
 import { notify } from '../utils/notify';
 import Button from './Button';
 
@@ -28,6 +29,8 @@ const Navbar = () => {
   const [showRoleModal, setShowRoleModal] = useState(false);
   
   const { login, logout, authenticated, user: privyUser } = usePrivy();
+  const { createWallet } = useCreateWallet();
+  const { aptosWallet, isCreating: isCreatingWallet } = useMovementWallet();
   
   const { 
     userRole, 
@@ -43,13 +46,24 @@ const Navbar = () => {
   // Load user role and balance on mount/auth change
   useEffect(() => {
     if (authenticated && privyUser) {
-      setUser(privyUser);
+      // Use the Aptos wallet from our custom hook if available
+      if (aptosWallet) {
+        console.log("Using Aptos Wallet:", aptosWallet.address);
+        const userWithAptos = {
+          ...privyUser,
+          wallet: aptosWallet
+        };
+        setUser(userWithAptos);
+      } else {
+        setUser(privyUser);
+      }
+
       loadUserRole();
       fetchBalance();
     } else {
       setUser(null);
     }
-  }, [authenticated, privyUser, setUser, loadUserRole, fetchBalance]);
+  }, [authenticated, privyUser, aptosWallet, setUser, loadUserRole, fetchBalance]);
 
   const handleConnect = async () => {
     try {
@@ -223,10 +237,60 @@ const Navbar = () => {
                     >
                       {/* User info */}
                       <div className="px-4 py-3 border-b border-gray-100">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium text-gray-900 truncate">
                           {getUserIdentifier()}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
+                        
+                        {/* Explicit Wallet Address Display */}
+                        {privyUser?.wallet ? (
+                          <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+                            <div className="text-xs text-gray-500 mb-1">Wallet Address</div>
+                            <div className="flex items-center justify-between">
+                              <code className="text-xs text-gray-700 truncate mr-2">
+                                {formatAddress(privyUser.wallet.address)}
+                              </code>
+                              <button 
+                                onClick={() => {
+                                  navigator.clipboard.writeText(privyUser.wallet.address);
+                                  notify.success('Address copied!');
+                                }}
+                                className="text-blue-600 hover:text-blue-700 text-xs font-medium"
+                              >
+                                Copy
+                              </button>
+                            </div>
+                            {privyUser.wallet.chainType && (
+                              <div className="text-[10px] text-gray-400 mt-1 uppercase">
+                                Type: {privyUser.wallet.chainType}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-2 p-2 bg-red-50 rounded border border-red-200">
+                            <div className="text-xs text-red-600 font-medium mb-2">
+                              No wallet connected
+                            </div>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  // Explicitly request Aptos wallet creation
+                                  await createWallet({ chainType: 'aptos' });
+                                  notify.success('Aptos Wallet created!');
+                                  // Refresh page to ensure state updates
+                                  setTimeout(() => window.location.reload(), 1000);
+                                } catch (e) {
+                                  console.error(e);
+                                  notify.error(`Failed to create wallet: ${e.message}`);
+                                }
+                              }}
+                              className="w-full px-3 py-1.5 bg-red-100 text-red-700 text-xs font-medium rounded hover:bg-red-200 transition-colors"
+                            >
+                              Create Wallet
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="text-xs text-gray-500 mt-2">
                           Balance: {balance.toFixed(2)} MOVE
                         </div>
                         <div className="text-xs text-gray-500">

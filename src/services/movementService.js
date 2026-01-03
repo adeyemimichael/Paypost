@@ -20,64 +20,65 @@ export const movementService = {
    */
   getSurveys: async () => {
     try {
-      // 1. Get list of active survey IDs
-      const activeSurveyIds = await aptos.view({
-        payload: {
-          function: `${MODULE_ADDRESS}::${MODULE_NAME}::get_active_surveys`,
-          functionArguments: [],
-        },
+      // Fetch the SurveyRegistry resource directly to get all fields
+      const resource = await aptos.getAccountResource({
+        accountAddress: MODULE_ADDRESS,
+        resourceType: `${MODULE_ADDRESS}::${MODULE_NAME}::SurveyRegistry`,
       });
 
-      const ids = activeSurveyIds[0]; // Vector of u64
-      
-      // 2. Fetch details for each survey
-      const surveys = await Promise.all(
-        ids.map(async (id) => {
+      const surveysData = resource.data.surveys; // Array of Survey objects
+
+      return surveysData.map((s) => {
+        try {
+          // Decode fields
+          const title = new TextDecoder().decode(new Uint8Array(s.title.vec ? s.title.vec[0] : s.title)); // Handle MoveString/vector format
+          const description = new TextDecoder().decode(new Uint8Array(s.description.vec ? s.description.vec[0] : s.description));
+          
+          // Try to parse questions from description if it's JSON, otherwise default
+          let questions = [];
           try {
-            const details = await aptos.view({
-              payload: {
-                function: `${MODULE_ADDRESS}::${MODULE_NAME}::get_survey`,
-                functionArguments: [id],
-              },
-            });
-
-            // Details: [creator, title, reward, max_responses, current_responses, remaining_funds, is_active]
-            // Title and description are vector<u8>, need to decode
-            const [
-              creator,
-              titleHex,
-              reward,
-              maxResponses,
-              currentResponses,
-              remainingFunds,
-              isActive
-            ] = details;
-
-            return {
-              id: id.toString(),
-              creator,
-              title: new TextDecoder().decode(new Uint8Array(titleHex.map(Number))), // Decode vector<u8>
-              // Description isn't in get_survey view, might need another way or just use title/preview
-              // For now, we'll use title as description or fetch if there's another view
-              description: "Blockchain Survey", // Placeholder as get_survey doesn't return description in the Move code I saw? 
-              // Wait, let me check the Move code again.
-              // get_survey returns: (creator, title, reward_amount, max_responses, current_responses, remaining_funds, is_active)
-              // It does NOT return description. I might need to add a view or just use what I have.
-              reward: Number(reward) / 100000000, // Assuming 8 decimals for MOVE? Or 6? Aptos is usually 8.
-              maxResponses: Number(maxResponses),
-              responses: Number(currentResponses),
-              isActive,
-              type: 'survey',
-              source: 'chain'
-            };
+            const parsed = JSON.parse(description);
+            if (parsed.questions) questions = parsed.questions;
           } catch (e) {
-            console.error(`Failed to fetch survey ${id}`, e);
-            return null;
+            // Not JSON or no questions
           }
-        })
-      );
 
-      return surveys.filter(s => s !== null);
+          if (questions.length === 0) {
+            // Default questions if none found (since contract doesn't store them explicitly)
+            questions = [
+              {
+                id: 1,
+                type: 'multiple-choice',
+                question: 'How would you rate this survey?',
+                options: ['Excellent', 'Good', 'Fair', 'Poor'],
+                required: true
+              }
+            ];
+          }
+
+          return {
+            id: s.id,
+            creator: s.creator,
+            title: title,
+            description: description,
+            preview: description.substring(0, 100) + '...',
+            content: description,
+            author: `${s.creator.substring(0, 6)}...${s.creator.substring(62)}`,
+            reward: Number(s.reward_amount) / 100000000,
+            maxResponses: Number(s.max_responses),
+            responses: Number(s.current_responses),
+            isActive: s.is_active,
+            timestamp: Number(s.created_at) * 1000, // Seconds to ms
+            image: 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800', // Default image
+            questions: questions,
+            type: 'survey',
+            source: 'chain'
+          };
+        } catch (e) {
+          console.error("Error parsing survey:", e);
+          return null;
+        }
+      }).filter(s => s !== null);
     } catch (error) {
       console.error("Failed to get surveys from chain:", error);
       return [];

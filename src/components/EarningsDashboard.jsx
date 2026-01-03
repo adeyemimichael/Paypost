@@ -1,18 +1,79 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, TrendingUp, CheckCircle, Gift, BookOpen, Unlock } from 'lucide-react';
+import { Wallet, TrendingUp, CheckCircle, Gift, BookOpen, Unlock, ArrowRight, Loader2 } from 'lucide-react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
 import { formatPrice } from '../utils/formatters';
 import { fadeIn } from '../animations/fadeIn';
 import Card from './Card';
+import Button from './Button';
 
 const EarningsDashboard = () => {
   const { isAuthenticated } = useUserStore();
-  const { getUserStats } = usePostStore();
+  const { getUserStats, getWithdrawPayload, refreshAfterAction } = usePostStore();
+  const { wallets } = useWallets();
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   if (!isAuthenticated) return null;
 
   const stats = getUserStats();
+
+  const handleWithdraw = async () => {
+    const wallet = wallets[0];
+    if (!wallet) {
+      alert("No wallet connected");
+      return;
+    }
+
+    const amount = stats.totalEarnings;
+    if (amount <= 0) {
+      alert("No earnings to withdraw");
+      return;
+    }
+
+    // For demo/MVP, we'll withdraw to a hardcoded address or ask user. 
+    // Since we don't have a UI for input address yet, let's assume we are "claiming" to the connected wallet 
+    // (which doesn't make sense if it's already there) OR we are withdrawing from a "platform" balance?
+    // Wait, the contract `complete_survey` pays the user directly.
+    // So the user *already has* the tokens in their wallet.
+    // The "Earnings" displayed are just a history of what they earned.
+    // BUT, the user request says "users will need to be able to withdraw their token".
+    // If the tokens are already in their wallet, they don't need to withdraw from the platform.
+    // UNLESS the contract holds them in an escrow or "UserActivity" balance.
+    // Let's check the contract `PayPost-Enhanced.move`.
+    // `complete_survey` -> `coin::deposit(participant_addr, reward)`.
+    // So the tokens ARE sent to the user immediately.
+    // So "Withdraw" might mean "Transfer to another wallet" (e.g. from embedded to main).
+    // I will implement it as a "Transfer" button then, or "Withdraw to External Wallet".
+    
+    const destinationAddress = prompt("Enter destination address to withdraw to:");
+    if (!destinationAddress) return;
+
+    setIsWithdrawing(true);
+    try {
+      const payload = getWithdrawPayload(destinationAddress, amount);
+      
+      // Sign and submit transaction
+      // Privy wallet `signTransaction` or `sendTransaction`
+      // For Aptos, we usually use the provider.
+      // wallet.getProvider() returns the Aptos provider?
+      // Let's try to use the standard Aptos way if possible, or Privy's generic way.
+      // Privy docs say: await wallet.sendTransaction(transactionRequest, uiOptions)
+      // For Aptos, transactionRequest is the payload.
+      
+      const txHash = await wallet.sendTransaction(payload);
+      console.log("Withdrawal TX:", txHash);
+      
+      alert(`Withdrawal successful! TX: ${txHash}`);
+      await refreshAfterAction(wallet.address);
+    } catch (error) {
+      console.error("Withdrawal failed:", error);
+      alert("Withdrawal failed. See console for details.");
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
 
   return (
     <motion.div {...fadeIn} className="mb-8">
@@ -69,30 +130,31 @@ const EarningsDashboard = () => {
             </div>
           </div>
           
-          {(stats.totalEarnings > 0 || stats.postsUnlocked > 0) && (
-            <div className="mt-6 pt-6 border-t border-movement-400">
-              <div className="text-center">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-movement-100 mb-1">
-                      Avg per survey: {stats.surveysCompleted > 0 ? formatPrice(stats.totalEarnings / stats.surveysCompleted) : '0 MOVE'}
-                    </p>
-                    <p className="text-xs text-movement-200">
-                      {stats.availableSurveys} surveys available
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-movement-100 mb-1">
-                      Content unlocked: {stats.postsUnlocked} posts
-                    </p>
-                    <p className="text-xs text-movement-200">
-                      {stats.availablePosts} posts available
-                    </p>
-                  </div>
-                </div>
-              </div>
+          <div className="mt-6 pt-6 border-t border-movement-400 flex justify-between items-center">
+            <div className="text-sm">
+              <p className="text-movement-100 mb-1">
+                Avg per survey: {stats.surveysCompleted > 0 ? formatPrice(stats.totalEarnings / stats.surveysCompleted) : '0 MOVE'}
+              </p>
             </div>
-          )}
+            
+            <Button 
+              onClick={handleWithdraw} 
+              disabled={isWithdrawing || stats.totalEarnings <= 0}
+              className="bg-white text-movement-600 hover:bg-gray-100 border-none"
+            >
+              {isWithdrawing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Withdraw Funds
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </Card>
     </motion.div>

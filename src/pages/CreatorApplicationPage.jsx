@@ -138,12 +138,28 @@ const CreatorApplicationPage = () => {
             Back to Creators
           </Link>
           
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Apply as Creator
-          </h1>
-          <p className="text-lg text-gray-600">
-            Join our community of creators and start monetizing your expertise on PayPost.
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+                Apply as Creator
+              </h1>
+              <p className="text-lg text-gray-600">
+                Join our community of creators and start monetizing your expertise on PayPost.
+              </p>
+            </div>
+            
+            {/* Show Balance for context */}
+            {isAuthenticated && (
+              <div className="hidden md:block">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                  <div className="text-sm text-gray-500 mb-1">Your Balance</div>
+                  <div className="text-2xl font-bold text-movement-600">
+                    {useUserStore.getState().balance.toFixed(2)} MOVE
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </motion.div>
 
         {/* Auth Check */}

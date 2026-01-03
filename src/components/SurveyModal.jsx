@@ -8,7 +8,7 @@ import { formatPrice } from '../utils/formatters';
 import { scaleIn } from '../animations/fadeIn';
 import Button from './Button';
 
-const SurveyModal = ({ isOpen, onClose, post }) => {
+const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
   const { user } = usePrivy();
   const { getDatabaseUserId } = useUserStore();
   const { completeSurvey, isLoading } = usePostStore();
@@ -76,15 +76,15 @@ const SurveyModal = ({ isOpen, onClose, post }) => {
 
   const handleSubmit = async () => {
     try {
-      // We can get the DB ID from the store or the user object if we synced it
-      // For now, let's rely on what the store has or what we can derive
-      const databaseUserId = user?.id; // Using Privy ID as fallback/primary for now if getDatabaseUserId is empty
-      
-      // We don't need walletAddress for the simulation if we just use user ID, 
-      // but let's pass it if available for consistency with the store's expectation
-      const walletAddress = user?.wallet?.address || user?.id;
-
-      await completeSurvey(post.id, responses, walletAddress, databaseUserId);
+      // Pass responses back to parent (PostCard) to handle transaction
+      if (onSubmit) {
+        await onSubmit(responses);
+      } else {
+        // Fallback for simulation/legacy
+        const databaseUserId = user?.id;
+        const walletAddress = user?.wallet?.address || user?.id;
+        await completeSurvey(post.id, responses, walletAddress, databaseUserId);
+      }
       setIsCompleted(true);
     } catch (error) {
       console.error('Failed to complete survey:', error);
