@@ -1,20 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePrivy } from '@privy-io/react-auth';
-import { X, CheckCircle, Clock, Users, Gift } from 'lucide-react';
+import { X, CheckCircle, Clock, Users, Gift, AlertCircle } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
+import { useSurveyStore } from '../stores/surveyStore';
 import { formatPrice } from '../utils/formatters';
 import { scaleIn } from '../animations/fadeIn';
+import { notify } from '../utils/notify';
 import Button from './Button';
 
 const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
   const { user } = usePrivy();
+  const { balance } = useUserStore();
   const { getDatabaseUserId } = useUserStore();
   const { completeSurvey, isLoading } = usePostStore();
+  const { hasCompletedSurvey, addCompletedSurvey, incrementSurveyResponses } = useSurveyStore();
+  
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState({});
   const [isCompleted, setIsCompleted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Debug logging
   console.log('SurveyModal props:', { isOpen, post: !!post });
@@ -22,8 +28,41 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
     console.log('Post questions:', post.questions);
   }
 
+  // Check if already completed
+  const alreadyCompleted = post ? hasCompletedSurvey(post.id) : false;
+
   if (!isOpen || !post) {
     return null;
+  }
+
+  // Show message if already completed
+  if (alreadyCompleted) {
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50"
+          onClick={onClose}
+        />
+        <div className="flex min-h-full items-center justify-center p-4">
+          <motion.div
+            {...scaleIn}
+            className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
+          >
+            <div className="text-center py-8">
+              <AlertCircle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Already Completed</h3>
+              <p className="text-gray-600 mb-4">
+                You've already completed this survey. Each participant can only complete a survey once.
+              </p>
+              <Button onClick={onClose}>Close</Button>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
   }
 
   if (!post.questions || post.questions.length === 0) {
@@ -75,19 +114,38 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
     try {
-      // Pass responses back to parent (PostCard) to handle transaction
+      // Add to completed surveys
+      const success = addCompletedSurvey(post.id, post.reward || post.rewardAmount);
+      
+      if (!success) {
+        notify.error('You have already completed this survey');
+        return;
+      }
+
+      // Increment response count for the survey
+      incrementSurveyResponses(post.id);
+      
+      // Update user balance (simulate receiving tokens)
+      const currentBalance = balance;
+      const newBalance = currentBalance + (post.reward || post.rewardAmount);
+      useUserStore.setState({ balance: newBalance });
+      
+      // Optional: Call onSubmit callback if provided
       if (onSubmit) {
         await onSubmit(responses);
-      } else {
-        // Fallback for simulation/legacy
-        const databaseUserId = user?.id;
-        const walletAddress = user?.wallet?.address || user?.id;
-        await completeSurvey(post.id, responses, walletAddress, databaseUserId);
       }
+      
+      notify.success(`Survey completed! You earned ${post.reward || post.rewardAmount} MOVE`);
       setIsCompleted(true);
     } catch (error) {
       console.error('Failed to complete survey:', error);
+      notify.error('Failed to complete survey');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

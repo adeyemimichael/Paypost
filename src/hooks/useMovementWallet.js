@@ -1,56 +1,77 @@
-import { useEffect, useState } from 'react';
-import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
+import { useState, useEffect } from 'react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { movementService } from '../services/movementService';
+import { notify } from '../utils/notify';
 
-/**
- * Custom hook to ensure user has an Aptos wallet for Movement blockchain
- * Based on PropaChain implementation pattern
- */
 export const useMovementWallet = () => {
-  const { authenticated, user } = usePrivy();
+  const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const { createWallet } = useCreateWallet();
-  const [isCreating, setIsCreating] = useState(false);
-  const [aptosWallet, setAptosWallet] = useState(null);
+  const [wallet, setWallet] = useState(null);
+  const [balance, setBalance] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Get the wallet from Privy
   useEffect(() => {
-    const initializeWallet = async () => {
-      if (!authenticated || !user) {
-        setAptosWallet(null);
-        return;
-      }
+    if (authenticated && wallets.length > 0) {
+      // Privy creates embedded wallets - use the first one
+      const privyWallet = wallets[0];
+      setWallet(privyWallet);
+    } else {
+      setWallet(null);
+    }
+  }, [authenticated, wallets]);
 
-      // Check if user already has an Aptos wallet
-      const existingAptosWallet = wallets.find(
-        (wallet) => wallet.chainType === 'aptos' || wallet.address?.length > 50
-      );
+  // Fetch balance when wallet changes
+  useEffect(() => {
+    if (wallet?.address) {
+      fetchBalance();
+    }
+  }, [wallet?.address]);
 
-      if (existingAptosWallet) {
-        console.log('Found existing Aptos wallet:', existingAptosWallet.address);
-        setAptosWallet(existingAptosWallet);
-        return;
-      }
+  const fetchBalance = async () => {
+    if (!wallet?.address) return;
+    
+    try {
+      const balance = await movementService.getBalance(wallet.address);
+      setBalance(balance);
+    } catch (error) {
+      console.error('Failed to fetch balance:', error);
+      setBalance(0);
+    }
+  };
 
-      // If no Aptos wallet exists, create one
-      if (!isCreating) {
-        setIsCreating(true);
-        try {
-          console.log('Creating Aptos wallet for Movement...');
-          await createWallet({ chainType: 'aptos' });
-          console.log('Aptos wallet created successfully');
-        } catch (error) {
-          console.error('Failed to create Aptos wallet:', error);
-        } finally {
-          setIsCreating(false);
-        }
-      }
-    };
+  // Sign and submit transaction to Move blockchain
+  const signAndSubmitTransaction = async (payload) => {
+    if (!wallet) {
+      throw new Error('No wallet connected');
+    }
 
-    initializeWallet();
-  }, [authenticated, user, wallets, createWallet, isCreating]);
+    setIsLoading(true);
+    try {
+      // Use Privy's wallet to sign and submit the transaction
+      const result = await wallet.signAndSubmitTransaction({
+        payload
+      });
+      
+      // Refresh balance after transaction
+      setTimeout(fetchBalance, 2000);
+      
+      return result;
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return {
-    aptosWallet,
-    isCreating,
-    hasAptosWallet: !!aptosWallet,
+    wallet,
+    address: wallet?.address,
+    balance,
+    isLoading,
+    fetchBalance,
+    signAndSubmitTransaction,
+    isConnected: !!wallet
   };
 };

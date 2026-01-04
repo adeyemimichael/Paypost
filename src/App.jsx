@@ -18,27 +18,67 @@ import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
 const AppContent = () => {
-  const { authenticated } = usePrivy();
-  const { loadUserRole, userRole } = useUserStore();
+  const { authenticated, ready } = usePrivy();
+  const { loadUserRole, userRole, setUserRole } = useUserStore();
   const { initialize: initializePostStore } = usePostStore();
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [pendingLogin, setPendingLogin] = useState(false);
 
   useEffect(() => {
-    // Initialize services
-    loadUserRole();
-    
-    // Initialize post store (will check Supabase availability)
-    initializePostStore();
-  }, [loadUserRole, initializePostStore]);
+    if (ready) {
+      // Initialize services
+      loadUserRole();
+      
+      // Initialize post store (will check Supabase availability)
+      initializePostStore();
+    }
+  }, [ready, loadUserRole, initializePostStore]);
 
-  // Show role selection modal after login if no role is set
+  // Handle role selection flow
   useEffect(() => {
-    if (authenticated && !userRole) {
+    // If user is authenticated but has no role, show role selection
+    if (authenticated && !userRole && !pendingLogin) {
       setShowRoleModal(true);
     } else {
       setShowRoleModal(false);
     }
-  }, [authenticated, userRole]);
+  }, [authenticated, userRole, pendingLogin]);
+
+  const handleRoleSelection = (selectedRole) => {
+    setUserRole(selectedRole);
+    setShowRoleModal(false);
+    setPendingLogin(false);
+  };
+
+  const handlePreLoginRoleSelection = (selectedRole) => {
+    // Store the selected role temporarily
+    localStorage.setItem('paypost_pending_role', selectedRole);
+    setPendingLogin(true);
+    setShowRoleModal(false);
+  };
+
+  // Check for pending role after login
+  useEffect(() => {
+    if (authenticated && pendingLogin) {
+      const pendingRole = localStorage.getItem('paypost_pending_role');
+      if (pendingRole) {
+        setUserRole(pendingRole);
+        localStorage.removeItem('paypost_pending_role');
+      }
+      setPendingLogin(false);
+    }
+  }, [authenticated, pendingLogin, setUserRole]);
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading PayPost...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Router>
@@ -46,7 +86,7 @@ const AppContent = () => {
         <NewNavbar />
         <main>
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Home onRoleSelect={handlePreLoginRoleSelection} />} />
             <Route path="/feed" element={<FeedPage />} />
             <Route path="/creators" element={<CreatorsPage />} />
             <Route path="/apply-creator" element={<CreatorApplicationPage />} />
@@ -61,7 +101,8 @@ const AppContent = () => {
         {/* Role Selection Modal - shown after login if no role is set */}
         <RoleSelectionModal 
           isOpen={showRoleModal} 
-          onClose={() => setShowRoleModal(false)} 
+          onClose={() => setShowRoleModal(false)}
+          onRoleSelect={handleRoleSelection}
         />
         
         <ToastContainer
@@ -88,7 +129,7 @@ const App = () => {
     <PrivyProvider
       appId={privyAppId}
       config={{
-        // Simple email and social login only
+        // Simple email and social login only - Privy handles wallet creation
         loginMethods: ['email', 'google'],
         appearance: {
           theme: 'light',

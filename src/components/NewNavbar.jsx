@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { 
   Menu, 
   X, 
@@ -14,8 +14,7 @@ import {
   User,
   ChevronDown,
   Info,
-  HelpCircle,
-  Coins
+  HelpCircle
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { useMovementWallet } from '../hooks/useMovementWallet';
@@ -26,11 +25,9 @@ const Navbar = () => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showRoleModal, setShowRoleModal] = useState(false);
   
   const { login, logout, authenticated, user: privyUser } = usePrivy();
-  const { createWallet } = useCreateWallet();
-  const { aptosWallet, isCreating: isCreatingWallet } = useMovementWallet();
+  const { address, balance, fetchBalance } = useMovementWallet();
   
   const { 
     userRole, 
@@ -38,32 +35,23 @@ const Navbar = () => {
     setUser, 
     isCreator,
     loadUserRole,
-    balance,
-    fetchBalance,
     updateBalance
   } = useUserStore();
 
-  // Load user role and balance on mount/auth change
+  // Sync Privy user with our store
   useEffect(() => {
     if (authenticated && privyUser) {
-      // Use the Aptos wallet from our custom hook if available
-      if (aptosWallet) {
-        console.log("Using Aptos Wallet:", aptosWallet.address);
-        const userWithAptos = {
-          ...privyUser,
-          wallet: aptosWallet
-        };
-        setUser(userWithAptos);
-      } else {
-        setUser(privyUser);
-      }
-
+      setUser(privyUser);
       loadUserRole();
-      fetchBalance();
     } else {
       setUser(null);
     }
-  }, [authenticated, privyUser, aptosWallet, setUser, loadUserRole, fetchBalance]);
+  }, [authenticated, privyUser, setUser, loadUserRole]);
+
+  // Sync wallet balance with store
+  useEffect(() => {
+    updateBalance(balance);
+  }, [balance, updateBalance]);
 
   const handleConnect = async () => {
     try {
@@ -85,22 +73,6 @@ const Navbar = () => {
     }
   };
 
-  const handleRoleSelect = (role) => {
-    setUserRole(role);
-    setShowRoleModal(false);
-    notify.success(`Welcome as a ${role}!`);
-  };
-
-  const handleFaucet = async () => {
-    try {
-      await updateBalance(100);
-      notify.success('Received 100 Test MOVE Tokens!');
-    } catch (error) {
-      console.error('Faucet failed:', error);
-      notify.error('Failed to get test tokens');
-    }
-  };
-
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Feed', href: '/feed', icon: FileText },
@@ -111,6 +83,11 @@ const Navbar = () => {
 
   const creatorNavigation = [
     { name: 'Create Survey', href: '/create-survey', icon: Plus },
+    { name: 'Dashboard', href: '/creator-dashboard', icon: FileText },
+  ];
+
+  const participantNavigation = [
+    { name: 'My Earnings', href: '/participant-dashboard', icon: Wallet },
   ];
 
   const formatAddress = (address) => {
@@ -121,7 +98,7 @@ const Navbar = () => {
   // Helper to get display identifier (email or wallet)
   const getUserIdentifier = () => {
     if (privyUser?.email?.address) return privyUser.email.address;
-    if (privyUser?.wallet?.address) return formatAddress(privyUser.wallet.address);
+    if (address) return formatAddress(address);
     return 'User';
   };
 
@@ -173,6 +150,27 @@ const Navbar = () => {
                       flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors
                       ${isActive
                         ? 'bg-green-100 text-green-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      }
+                    `}
+                  >
+                    <item.icon className="w-4 h-4 mr-2" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+
+              {/* Participant-only navigation */}
+              {userRole === 'participant' && participantNavigation.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`
+                      flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors
+                      ${isActive
+                        ? 'bg-purple-100 text-purple-700'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                       }
                     `}
@@ -241,17 +239,17 @@ const Navbar = () => {
                           {getUserIdentifier()}
                         </div>
                         
-                        {/* Explicit Wallet Address Display */}
-                        {privyUser?.wallet ? (
+                        {/* Wallet Address Display */}
+                        {address && (
                           <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
                             <div className="text-xs text-gray-500 mb-1">Wallet Address</div>
                             <div className="flex items-center justify-between">
                               <code className="text-xs text-gray-700 truncate mr-2">
-                                {formatAddress(privyUser.wallet.address)}
+                                {formatAddress(address)}
                               </code>
                               <button 
                                 onClick={() => {
-                                  navigator.clipboard.writeText(privyUser.wallet.address);
+                                  navigator.clipboard.writeText(address);
                                   notify.success('Address copied!');
                                 }}
                                 className="text-blue-600 hover:text-blue-700 text-xs font-medium"
@@ -259,34 +257,6 @@ const Navbar = () => {
                                 Copy
                               </button>
                             </div>
-                            {privyUser.wallet.chainType && (
-                              <div className="text-[10px] text-gray-400 mt-1 uppercase">
-                                Type: {privyUser.wallet.chainType}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="mt-2 p-2 bg-red-50 rounded border border-red-200">
-                            <div className="text-xs text-red-600 font-medium mb-2">
-                              No wallet connected
-                            </div>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  // Explicitly request Aptos wallet creation
-                                  await createWallet({ chainType: 'aptos' });
-                                  notify.success('Aptos Wallet created!');
-                                  // Refresh page to ensure state updates
-                                  setTimeout(() => window.location.reload(), 1000);
-                                } catch (e) {
-                                  console.error(e);
-                                  notify.error(`Failed to create wallet: ${e.message}`);
-                                }
-                              }}
-                              className="w-full px-3 py-1.5 bg-red-100 text-red-700 text-xs font-medium rounded hover:bg-red-200 transition-colors"
-                            >
-                              Create Wallet
-                            </button>
                           </div>
                         )}
 
@@ -297,26 +267,6 @@ const Navbar = () => {
                           Role: {userRole || 'Not set'}
                         </div>
                       </div>
-
-                      {/* Test Faucet */}
-                      <button
-                        onClick={handleFaucet}
-                        className="w-full px-4 py-2 text-left text-sm text-green-600 hover:bg-green-50"
-                      >
-                        <Coins className="w-4 h-4 inline mr-2" />
-                        Get Test Tokens (Faucet)
-                      </button>
-
-                      {/* Role selection */}
-                      {!userRole && (
-                        <button
-                          onClick={() => setShowRoleModal(true)}
-                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <User className="w-4 h-4 inline mr-2" />
-                          Select Role
-                        </button>
-                      )}
 
                       {/* Disconnect */}
                       <button
@@ -394,6 +344,27 @@ const Navbar = () => {
                   </Link>
                 );
               })}
+
+              {userRole === 'participant' && participantNavigation.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={() => setIsOpen(false)}
+                    className={`
+                      flex items-center px-3 py-2 rounded-md text-base font-medium
+                      ${isActive
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      }
+                    `}
+                  >
+                    <item.icon className="w-5 h-5 mr-3" />
+                    {item.name}
+                  </Link>
+                );
+              })}
             </div>
 
             {/* Mobile balance info */}
@@ -405,78 +376,9 @@ const Navbar = () => {
                     {balance.toFixed(2)} MOVE
                   </span>
                 </div>
-                <button
-                  onClick={handleFaucet}
-                  className="mt-2 w-full flex items-center px-3 py-2 rounded-md text-base font-medium text-green-600 hover:bg-green-50"
-                >
-                  <Coins className="w-5 h-5 mr-3" />
-                  Get Test Tokens
-                </button>
               </div>
             )}
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Role Selection Modal */}
-      <AnimatePresence>
-        {showRoleModal && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black bg-opacity-25"
-                onClick={() => setShowRoleModal(false)}
-              />
-              
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6"
-              >
-                <div className="text-center mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    Choose Your Role
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Select how you want to use PayPost
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <button
-                    onClick={() => handleRoleSelect('reader')}
-                    className="w-full p-4 text-left border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
-                  >
-                    <div className="font-medium text-gray-900">Participant</div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      Complete surveys and earn MOVE tokens
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => handleRoleSelect('creator')}
-                    className="w-full p-4 text-left border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
-                  >
-                    <div className="font-medium text-gray-900">Creator</div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      Create surveys and gather insights
-                    </div>
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setShowRoleModal(false)}
-                  className="mt-4 w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-                >
-                  Skip for now
-                </button>
-              </motion.div>
-            </div>
-          </div>
         )}
       </AnimatePresence>
     </nav>

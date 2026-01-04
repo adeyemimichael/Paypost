@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { 
   Plus, 
   Trash2, 
@@ -15,20 +15,20 @@ import {
   X
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
-import { usePostStore } from '../stores/postStore';
+import { useMovementWallet } from '../hooks/useMovementWallet';
+import { movementService } from '../services/movementService';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
-import WalletBalance from '../components/WalletBalance';
 import { notify } from '../utils/notify';
 
 const CreateSurveyPage = () => {
   const navigate = useNavigate();
-  const { user, authenticated } = usePrivy();
-  const { wallets } = useWallets();
+  const { authenticated } = usePrivy();
+  const { signAndSubmitTransaction, balance, isLoading: walletLoading } = useMovementWallet();
   const { 
     userRole, 
     isCreator, 
-    balance 
+    updateBalance
   } = useUserStore();
   
   const [isLoading, setIsLoading] = useState(false);
@@ -143,11 +143,10 @@ const CreateSurveyPage = () => {
     if (surveyData.rewardAmount <= 0) return 'Reward amount must be greater than 0';
     if (surveyData.maxResponses <= 0) return 'Max responses must be greater than 0';
     
-    const userBalance = balance;
     const totalCost = calculateTotalCost();
     
-    if (userBalance < totalCost) {
-      return `Insufficient balance. You need ${totalCost.toFixed(2)} MOVE but only have ${userBalance.toFixed(2)} MOVE`;
+    if (balance < totalCost) {
+      return `Insufficient balance. You need ${totalCost.toFixed(2)} MOVE but only have ${balance.toFixed(2)} MOVE`;
     }
     
     for (let question of surveyData.questions) {
@@ -175,74 +174,24 @@ const CreateSurveyPage = () => {
       return;
     }
 
-    const wallet = wallets[0];
-    if (!wallet) {
-      notify.error('Please connect your wallet to fund the survey');
-      return;
-    }
-
     setIsLoading(true);
     
     try {
-      // 1. Save to Supabase first (Metadata)
-      const { supabaseService } = await import('../services/supabaseService');
-      const dbUser = await supabaseService.getOrCreateUser(
-        user?.wallet?.address || user?.email?.address || 'unknown_user',
-        user?.email?.address,
-        userRole,
-        user?.id
-      );
-
-      if (!dbUser || !dbUser.id) throw new Error('Failed to retrieve user ID');
-
-      // Create initial record in Supabase (status: pending_payment)
-      const { data: surveyRecord, error: dbError } = await supabaseService.createSurvey({
-        title: surveyData.title,
-        description: surveyData.description,
-        reward_amount: surveyData.rewardAmount,
-        max_responses: surveyData.maxResponses,
-        questions: surveyData.questions.map(q => ({
-          text: q.question,
-          type: q.type,
-          options: q.options,
-          required: true
-        })),
-        image_url: surveyData.image?.url, // In real app, upload to storage first
-        status: 'pending_payment'
-      }, dbUser.id);
-
-      if (dbError) throw dbError;
-      console.log('Survey saved to DB:', surveyRecord);
-
-      // 2. Fund on Blockchain
-      const durationSeconds = surveyData.durationDays * 24 * 60 * 60;
-      const { getCreateSurveyPayload, refreshAfterAction } = usePostStore.getState();
-      
-      const payload = getCreateSurveyPayload(
+      // Create survey payload for Move contract
+      const payload = movementService.createSurveyPayload(
         surveyData.title,
-        JSON.stringify({ 
-          description: surveyData.description, 
-          questions: surveyData.questions 
-        }), // Store full metadata in description field on-chain as backup/reference
+        surveyData.description,
         surveyData.rewardAmount,
         surveyData.maxResponses,
-        durationSeconds
+        surveyData.durationDays * 24 * 60 * 60 // Convert days to seconds
       );
 
-      // Sign and submit
-      const txHash = await wallet.sendTransaction(payload);
-      console.log("Survey Creation TX:", txHash);
-
-      // 3. Update Supabase with Chain ID and Active Status
-      // We need to wait for the transaction to be indexed to get the ID, 
-      // but for now we can mark it as 'funded' and store the txHash.
-      // Ideally, we'd have an indexer or event listener. 
-      // For this hackathon, we might just set it active.
+      // Submit transaction to Move blockchain
+      const result = await signAndSubmitTransaction(payload);
       
-      await supabaseService.updateSurveyStatus(surveyRecord[0].id, 'active', txHash);
-
-      notify.success(`Survey created and funded successfully!`);
-      await refreshAfterAction(wallet.address);
+      console.log('Survey created on blockchain:', result);
+      
+      notify.success(`Survey created successfully! Transaction: ${result.hash}`);
       navigate('/feed');
 
     } catch (error) {
@@ -301,11 +250,9 @@ const CreateSurveyPage = () => {
                 <Wallet className="w-6 h-6" />
                 <div className="text-left">
                   <div className="text-sm opacity-90">Available Balance</div>
-                  <WalletBalance 
-                    size="md" 
-                    showLabel={false} 
-                    className="bg-white/20 border-white/30 text-white [&>*]:text-white"
-                  />
+                  <div className="text-xl font-bold">
+                    {balance.toFixed(2)} MOVE
+                  </div>
                 </div>
               </div>
             </div>
@@ -461,16 +408,15 @@ const CreateSurveyPage = () => {
               </div>
               
               {(() => {
-                const userBalance = balance;
                 const totalCost = calculateTotalCost();
                 
-                if (userBalance < totalCost) {
+                if (balance < totalCost) {
                   return (
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <div className="flex items-center text-red-700">
                         <AlertCircle className="w-4 h-4 mr-2" />
                         <span className="text-sm font-medium">
-                          Insufficient Balance: Need {(totalCost - userBalance).toFixed(2)} more MOVE
+                          Insufficient Balance: Need {(totalCost - balance).toFixed(2)} more MOVE
                         </span>
                       </div>
                     </div>
@@ -482,7 +428,7 @@ const CreateSurveyPage = () => {
                     <div className="flex items-center text-green-700">
                       <CheckCircle className="w-4 h-4 mr-2" />
                       <span className="text-sm font-medium">
-                        Sufficient Balance: {(userBalance - totalCost).toFixed(2)} MOVE remaining
+                        Sufficient Balance: {(balance - totalCost).toFixed(2)} MOVE remaining
                       </span>
                     </div>
                   </div>
@@ -617,14 +563,14 @@ const CreateSurveyPage = () => {
               type="button"
               variant="outline"
               onClick={() => navigate('/feed')}
-              disabled={isLoading}
+              disabled={isLoading || walletLoading}
             >
               Cancel
             </Button>
             
             <Button
               type="submit"
-              loading={isLoading}
+              loading={isLoading || walletLoading}
               className="px-8"
             >
               <CheckCircle className="w-4 h-4 mr-2" />

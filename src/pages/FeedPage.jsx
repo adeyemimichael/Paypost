@@ -5,6 +5,7 @@ import { useUserStore } from '../stores/userStore';
 import { fadeIn } from '../animations/fadeIn';
 import Feed from '../components/Feed';
 import EarningsDashboard from '../components/EarningsDashboard';
+import CreatorDashboard from '../components/CreatorDashboard';
 import WalletBalance from '../components/WalletBalance';
 import Button from '../components/Button';
 
@@ -74,8 +75,10 @@ const FeedPage = () => {
           )}
         </motion.div>
 
-        {/* Earnings Dashboard */}
-        <EarningsDashboard />
+        {/* Dashboard - Different for Creators vs Participants */}
+        {isAuthenticated && (
+          isCreator() ? <CreatorDashboard /> : <EarningsDashboard />
+        )}
 
         {/* Connection Prompt for Guests */}
         {!isAuthenticated && (
@@ -103,13 +106,15 @@ const FeedPage = () => {
           </motion.div>
         )}
 
-        {/* Feed */}
-        <motion.div 
-          {...fadeIn}
-          transition={{ delay: isAuthenticated ? 0.2 : 0.4 }}
-        >
-          <Feed />
-        </motion.div>
+        {/* Feed - Only show for participants */}
+        {!isCreator() && (
+          <motion.div 
+            {...fadeIn}
+            transition={{ delay: isAuthenticated ? 0.2 : 0.4 }}
+          >
+            <Feed />
+          </motion.div>
+        )}
 
         {/* Stats Section */}
         <motion.div 

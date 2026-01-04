@@ -1,22 +1,16 @@
 import { create } from 'zustand';
-import { movementService } from '../services/movementService';
 
 export const useUserStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
-  userRole: null, // 'creator' or 'reader'
+  userRole: null, // 'creator' or 'participant'
   balance: 0,
   isLoading: false,
   
-  setUser: (user) => {
+  setUser: async (user) => {
     set({ user, isAuthenticated: !!user });
     if (user) {
       get().loadUserRole();
-      get().fetchBalance();
-      
-      // Initialize survey store
-      const { useSurveyStore } = require('./surveyStore');
-      useSurveyStore.getState().initialize();
     }
   },
   
@@ -26,13 +20,13 @@ export const useUserStore = create((set, get) => ({
     if (role) {
       localStorage.setItem('paypost_user_role', role);
       
-      // Auto-fund creators with test tokens (simulating faucet)
+      // Auto-fund creators with 100 MOVE tokens (simulated)
       if (role === 'creator') {
         const currentBalance = get().balance;
-        if (currentBalance === 0) {
-          // Give creators 1000 test MOVE tokens to start
-          set({ balance: 1000 });
-          console.log('Creator auto-funded with 1000 test MOVE tokens');
+        if (currentBalance < 100) {
+          // Give creators 100 MOVE tokens to start
+          set({ balance: 100 });
+          console.log('Creator auto-funded with 100 MOVE tokens');
         }
       }
     } else {
@@ -47,30 +41,12 @@ export const useUserStore = create((set, get) => ({
     }
   },
   
-  // Real Balance Management
-  fetchBalance: async () => {
-    const { user } = get();
-    if (!user) return;
-    
-    // Check if user has a wallet address
-    const walletAddress = user.wallet?.address || user.email?.address; // Adjust based on Privy user object structure
-    
-    if (walletAddress) {
-      try {
-        const balance = await movementService.getBalance(walletAddress);
-        set({ balance });
-      } catch (error) {
-        console.error('Failed to fetch balance:', error);
-      }
-    }
-  },
-
-  // Update balance is now just a refresh, as the chain is the source of truth
-  updateBalance: async () => {
-    await get().fetchBalance();
+  // Update balance from wallet hook
+  updateBalance: (balance) => {
+    set({ balance });
   },
   
-  logout: () => {
+  logout: async () => {
     set({ 
       user: null, 
       isAuthenticated: false, 
@@ -78,10 +54,6 @@ export const useUserStore = create((set, get) => ({
       balance: 0
     });
     localStorage.removeItem('paypost_user_role');
-    
-    // Clear survey store
-    const { useSurveyStore } = require('./surveyStore');
-    useSurveyStore.getState().clear();
   },
   
   isCreator: () => {
@@ -89,8 +61,8 @@ export const useUserStore = create((set, get) => ({
     return userRole === 'creator';
   },
   
-  isReader: () => {
+  isParticipant: () => {
     const { userRole } = get();
-    return userRole === 'reader';
+    return userRole === 'participant';
   },
 }));

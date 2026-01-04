@@ -15,30 +15,6 @@ import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
 
 const AboutPage = () => {
-  const teamMembers = [
-    {
-      name: 'Alex Chen',
-      role: 'CEO & Co-Founder',
-      bio: 'Former Google PM with 8+ years in Web3. Built 3 successful startups.',
-      image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-      linkedin: '#'
-    },
-    {
-      name: 'Sarah Kim',
-      role: 'CTO & Co-Founder',
-      bio: 'Ex-Coinbase engineer. Expert in blockchain infrastructure and smart contracts.',
-      image: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
-      linkedin: '#'
-    },
-    {
-      name: 'Marcus Johnson',
-      role: 'Head of Product',
-      bio: 'Former Uber product lead. Passionate about user experience and growth.',
-      image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-      linkedin: '#'
-    }
-  ];
-
   const milestones = [
     {
       date: '2024 Q1',
@@ -182,46 +158,6 @@ const AboutPage = () => {
                 </h3>
                 <p className="text-gray-600 dark:text-gray-300">
                   {value.description}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Team Section */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white/50 dark:bg-gray-800/50">
-        <div className="max-w-6xl mx-auto">
-          <motion.div {...fadeIn} className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-              Meet Our Team
-            </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              Experienced builders from top tech companies, united by a vision to democratize market research
-            </p>
-          </motion.div>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            {teamMembers.map((member, index) => (
-              <motion.div
-                key={member.name}
-                {...fadeIn}
-                transition={{ delay: index * 0.2 }}
-                className="text-center p-6 rounded-2xl bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                <img 
-                  src={member.image} 
-                  alt={member.name}
-                  className="w-24 h-24 rounded-full mx-auto mb-4 object-cover"
-                />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  {member.name}
-                </h3>
-                <p className="text-movement-600 dark:text-movement-400 font-medium mb-3">
-                  {member.role}
-                </p>
-                <p className="text-gray-600 dark:text-gray-300 text-sm">
-                  {member.bio}
                 </p>
               </motion.div>
             ))}
