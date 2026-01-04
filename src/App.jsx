@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { PrivyProvider } from '@privy-io/react-auth';
+import { PrivyProvider, usePrivy } from '@privy-io/react-auth';
 import { ToastContainer } from 'react-toastify';
 import { useUserStore } from './stores/userStore';
 import { usePostStore } from './stores/postStore';
 import NewNavbar from './components/NewNavbar';
+import RoleSelectionModal from './components/RoleSelectionModal';
 import Home from './pages/Home';
 import FeedPage from './pages/FeedPage';
 import CreatorsPage from './pages/CreatorsPage';
@@ -17,8 +18,10 @@ import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
 const AppContent = () => {
-  const { loadUserRole } = useUserStore();
+  const { authenticated } = usePrivy();
+  const { loadUserRole, userRole } = useUserStore();
   const { initialize: initializePostStore } = usePostStore();
+  const [showRoleModal, setShowRoleModal] = useState(false);
 
   useEffect(() => {
     // Initialize services
@@ -27,6 +30,15 @@ const AppContent = () => {
     // Initialize post store (will check Supabase availability)
     initializePostStore();
   }, [loadUserRole, initializePostStore]);
+
+  // Show role selection modal after login if no role is set
+  useEffect(() => {
+    if (authenticated && !userRole) {
+      setShowRoleModal(true);
+    } else {
+      setShowRoleModal(false);
+    }
+  }, [authenticated, userRole]);
 
   return (
     <Router>
@@ -45,6 +57,12 @@ const AppContent = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        
+        {/* Role Selection Modal - shown after login if no role is set */}
+        <RoleSelectionModal 
+          isOpen={showRoleModal} 
+          onClose={() => setShowRoleModal(false)} 
+        />
         
         <ToastContainer
           position="top-right"

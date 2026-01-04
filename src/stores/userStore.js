@@ -13,6 +13,10 @@ export const useUserStore = create((set, get) => ({
     if (user) {
       get().loadUserRole();
       get().fetchBalance();
+      
+      // Initialize survey store
+      const { useSurveyStore } = require('./surveyStore');
+      useSurveyStore.getState().initialize();
     }
   },
   
@@ -21,6 +25,16 @@ export const useUserStore = create((set, get) => ({
     // Store role in localStorage for persistence
     if (role) {
       localStorage.setItem('paypost_user_role', role);
+      
+      // Auto-fund creators with test tokens (simulating faucet)
+      if (role === 'creator') {
+        const currentBalance = get().balance;
+        if (currentBalance === 0) {
+          // Give creators 1000 test MOVE tokens to start
+          set({ balance: 1000 });
+          console.log('Creator auto-funded with 1000 test MOVE tokens');
+        }
+      }
     } else {
       localStorage.removeItem('paypost_user_role');
     }
@@ -64,6 +78,10 @@ export const useUserStore = create((set, get) => ({
       balance: 0
     });
     localStorage.removeItem('paypost_user_role');
+    
+    // Clear survey store
+    const { useSurveyStore } = require('./surveyStore');
+    useSurveyStore.getState().clear();
   },
   
   isCreator: () => {
