@@ -14,7 +14,8 @@ import {
   User,
   ChevronDown,
   Info,
-  HelpCircle
+  HelpCircle,
+  Coins
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { useMovementWallet } from '../hooks/useMovementWallet';
@@ -27,7 +28,7 @@ const Navbar = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   
   const { login, logout, authenticated, user: privyUser } = usePrivy();
-  const { address, balance, fetchBalance } = useMovementWallet();
+  const { aptosWallet, isCreating: isCreatingWallet } = useMovementWallet();
   
   const { 
     userRole, 
@@ -35,23 +36,32 @@ const Navbar = () => {
     setUser, 
     isCreator,
     loadUserRole,
+    balance,
+    fetchBalance,
     updateBalance
   } = useUserStore();
 
-  // Sync Privy user with our store
+  // Load user role and balance on mount/auth change
   useEffect(() => {
     if (authenticated && privyUser) {
-      setUser(privyUser);
+      // Use the Aptos wallet from our custom hook if available
+      if (aptosWallet) {
+        console.log("Using Aptos Wallet:", aptosWallet.address);
+        const userWithAptos = {
+          ...privyUser,
+          wallet: aptosWallet
+        };
+        setUser(userWithAptos);
+      } else {
+        setUser(privyUser);
+      }
+
       loadUserRole();
+      fetchBalance();
     } else {
       setUser(null);
     }
-  }, [authenticated, privyUser, setUser, loadUserRole]);
-
-  // Sync wallet balance with store
-  useEffect(() => {
-    updateBalance(balance);
-  }, [balance, updateBalance]);
+  }, [authenticated, privyUser, aptosWallet, setUser, loadUserRole, fetchBalance]);
 
   const handleConnect = async () => {
     try {
@@ -83,11 +93,10 @@ const Navbar = () => {
 
   const creatorNavigation = [
     { name: 'Create Survey', href: '/create-survey', icon: Plus },
-    { name: 'Dashboard', href: '/creator-dashboard', icon: FileText },
   ];
 
   const participantNavigation = [
-    { name: 'My Earnings', href: '/participant-dashboard', icon: Wallet },
+    // Removed dashboard - will be accessible through profile menu later
   ];
 
   const formatAddress = (address) => {
@@ -98,7 +107,7 @@ const Navbar = () => {
   // Helper to get display identifier (email or wallet)
   const getUserIdentifier = () => {
     if (privyUser?.email?.address) return privyUser.email.address;
-    if (address) return formatAddress(address);
+    if (privyUser?.wallet?.address) return formatAddress(privyUser.wallet.address);
     return 'User';
   };
 
@@ -150,27 +159,6 @@ const Navbar = () => {
                       flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors
                       ${isActive
                         ? 'bg-green-100 text-green-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      }
-                    `}
-                  >
-                    <item.icon className="w-4 h-4 mr-2" />
-                    {item.name}
-                  </Link>
-                );
-              })}
-
-              {/* Participant-only navigation */}
-              {userRole === 'participant' && participantNavigation.map((item) => {
-                const isActive = location.pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    className={`
-                      flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors
-                      ${isActive
-                        ? 'bg-purple-100 text-purple-700'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                       }
                     `}
@@ -239,23 +227,34 @@ const Navbar = () => {
                           {getUserIdentifier()}
                         </div>
                         
-                        {/* Wallet Address Display */}
-                        {address && (
+                        {/* Explicit Wallet Address Display */}
+                        {privyUser?.wallet ? (
                           <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
                             <div className="text-xs text-gray-500 mb-1">Wallet Address</div>
                             <div className="flex items-center justify-between">
                               <code className="text-xs text-gray-700 truncate mr-2">
-                                {formatAddress(address)}
+                                {formatAddress(privyUser.wallet.address)}
                               </code>
                               <button 
                                 onClick={() => {
-                                  navigator.clipboard.writeText(address);
+                                  navigator.clipboard.writeText(privyUser.wallet.address);
                                   notify.success('Address copied!');
                                 }}
                                 className="text-blue-600 hover:text-blue-700 text-xs font-medium"
                               >
                                 Copy
                               </button>
+                            </div>
+                            {privyUser.wallet.chainType && (
+                              <div className="text-[10px] text-gray-400 mt-1 uppercase">
+                                Type: {privyUser.wallet.chainType}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+                            <div className="text-xs text-gray-600">
+                              Wallet will be created automatically on login
                             </div>
                           </div>
                         )}
@@ -269,6 +268,20 @@ const Navbar = () => {
                       </div>
 
                       {/* Disconnect */}
+                      {isCreator() && (
+                        <button
+                          onClick={() => {
+                            const currentBalance = balance;
+                            updateBalance(currentBalance + 100);
+                            notify.success('Added 100 MOVE tokens!');
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-green-600 hover:bg-green-50 border-b border-gray-100"
+                        >
+                          <Coins className="w-4 h-4 inline mr-2" />
+                          Get 100 MOVE (Faucet)
+                        </button>
+                      )}
+                      
                       <button
                         onClick={handleDisconnect}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
@@ -335,27 +348,6 @@ const Navbar = () => {
                       flex items-center px-3 py-2 rounded-md text-base font-medium
                       ${isActive
                         ? 'bg-green-100 text-green-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      }
-                    `}
-                  >
-                    <item.icon className="w-5 h-5 mr-3" />
-                    {item.name}
-                  </Link>
-                );
-              })}
-
-              {userRole === 'participant' && participantNavigation.map((item) => {
-                const isActive = location.pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    onClick={() => setIsOpen(false)}
-                    className={`
-                      flex items-center px-3 py-2 rounded-md text-base font-medium
-                      ${isActive
-                        ? 'bg-purple-100 text-purple-700'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                       }
                     `}

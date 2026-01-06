@@ -77,29 +77,75 @@ export const usePostStore = create((set, get) => ({
     }
   },
 
-  // Fallback to Supabase
+  // Load surveys from Supabase (primary data source)
   loadSurveysFromSupabase: async (filters = {}) => {
     try {
+      console.log('📊 Loading surveys from Supabase...');
       const surveys = await supabaseService.getSurveys(filters);
+      
+      // Transform surveys to match expected format
       const transformedSurveys = surveys.map(survey => ({
         id: survey.id,
         title: survey.title,
-        preview: survey.description,
-        content: survey.description,
-        reward: parseFloat(survey.reward_amount),
-        type: 'survey',
-        responses: survey.current_responses,
-        maxResponses: survey.max_responses,
-        isActive: survey.is_active,
+        preview: survey.description?.substring(0, 100) + '...' || 'No description',
+        content: survey.description || 'No description available',
+        author: survey.creator?.display_name || 'Unknown Creator',
+        reward: parseFloat(survey.reward_amount) || 0,
+        maxResponses: survey.max_responses || 100,
+        responses: survey.current_responses || 0,
+        isActive: survey.is_active !== false,
         timestamp: new Date(survey.created_at).getTime(),
-        image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400',
+        image: survey.image_url || 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800',
         questions: survey.questions || [],
-        source: 'supabase'
+        type: 'survey',
+        source: 'supabase',
+        creatorId: survey.creator_id,
+        category: survey.category || 'general',
+        estimatedTime: survey.estimated_time || 5
       }));
+      
       set({ posts: transformedSurveys });
+      console.log(`✅ Loaded ${transformedSurveys.length} surveys from Supabase`);
     } catch (error) {
       console.error('❌ Failed to load from Supabase:', error);
       get().loadMockSurveys();
+    }
+  },
+
+  // Load user activity from Supabase
+  loadUserSupabaseActivity: async (userAddress) => {
+    try {
+      console.log('👤 Loading user activity from Supabase...');
+      
+      // Get user by wallet address
+      const user = await supabaseService.getUser(userAddress);
+      if (!user) {
+        console.log('User not found in database');
+        return;
+      }
+
+      // Get user stats
+      const stats = await supabaseService.getUserStats(user.id);
+      set({ userEarnings: stats.totalEarnings || 0 });
+      
+      // Get completed surveys for this user
+      const { posts } = get();
+      const completed = new Set();
+      
+      // Check each survey to see if user completed it
+      await Promise.all(posts.map(async (post) => {
+        if (post.type === 'survey') {
+          const hasCompleted = await supabaseService.hasCompletedSurvey(post.id, user.id);
+          if (hasCompleted) {
+            completed.add(post.id);
+          }
+        }
+      }));
+      
+      set({ completedSurveys: completed });
+      console.log(`✅ User has completed ${completed.size} surveys`);
+    } catch (error) {
+      console.error('❌ Failed to load user activity from Supabase:', error);
     }
   },
 
@@ -133,14 +179,18 @@ export const usePostStore = create((set, get) => ({
     set({ posts: mockSurveys });
   },
 
-  // Refresh data after blockchain transactions
+  // Refresh data after user actions (Supabase-first)
   refreshAfterAction: async (userAddress) => {
     set({ isLoading: true });
     try {
-      await get().loadSurveysFromChain();
+      console.log('🔄 Refreshing data after user action...');
+      await get().loadSurveysFromSupabase();
       if (userAddress) {
-        await get().loadUserChainActivity(userAddress);
+        await get().loadUserSupabaseActivity(userAddress);
       }
+      console.log('✅ Data refreshed successfully');
+    } catch (error) {
+      console.error('❌ Failed to refresh data:', error);
     } finally {
       set({ isLoading: false });
     }

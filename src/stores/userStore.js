@@ -11,6 +11,7 @@ export const useUserStore = create((set, get) => ({
     set({ user, isAuthenticated: !!user });
     if (user) {
       get().loadUserRole();
+      get().fetchBalance();
     }
   },
   
@@ -20,13 +21,13 @@ export const useUserStore = create((set, get) => ({
     if (role) {
       localStorage.setItem('paypost_user_role', role);
       
-      // Auto-fund creators with 100 MOVE tokens (simulated)
+      // Auto-fund creators with 100 MOVE tokens (simulate faucet)
       if (role === 'creator') {
         const currentBalance = get().balance;
         if (currentBalance < 100) {
-          // Give creators 100 MOVE tokens to start
+          // Give creators 100 test MOVE tokens to start
           set({ balance: 100 });
-          console.log('Creator auto-funded with 100 MOVE tokens');
+          console.log('Creator auto-funded with 100 test MOVE tokens');
         }
       }
     } else {
@@ -41,9 +42,30 @@ export const useUserStore = create((set, get) => ({
     }
   },
   
-  // Update balance from wallet hook
+  // Update balance from wallet hook or manual update
   updateBalance: (balance) => {
+    const { user } = get();
     set({ balance });
+    
+    // Persist to localStorage for simulation
+    if (user) {
+      localStorage.setItem(`paypost_balance_${user.id || user.wallet?.address}`, balance.toString());
+    }
+  },
+  
+  // Fetch balance from localStorage (simulated balance)
+  fetchBalance: async () => {
+    const { user } = get();
+    if (!user) return;
+    
+    // For now, use localStorage to persist simulated balance
+    const savedBalance = localStorage.getItem(`paypost_balance_${user.id || user.wallet?.address}`);
+    if (savedBalance) {
+      set({ balance: parseFloat(savedBalance) });
+    } else {
+      // Default balance for new users
+      set({ balance: 0 });
+    }
   },
   
   logout: async () => {

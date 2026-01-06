@@ -11,6 +11,8 @@ import FeedPage from './pages/FeedPage';
 import CreatorsPage from './pages/CreatorsPage';
 import CreatorApplicationPage from './pages/CreatorApplicationPage';
 import CreateSurveyPage from './pages/CreateSurveyPage';
+import StatusPage from './pages/StatusPage';
+import TestPage from './pages/TestPage';
 import AboutPage from './pages/AboutPage';
 import HowItWorksPage from './pages/HowItWorksPage';
 import FAQPage from './pages/FAQPage';
@@ -91,6 +93,8 @@ const AppContent = () => {
             <Route path="/creators" element={<CreatorsPage />} />
             <Route path="/apply-creator" element={<CreatorApplicationPage />} />
             <Route path="/create-survey" element={<CreateSurveyPage />} />
+            <Route path="/status" element={<StatusPage />} />
+            <Route path="/test" element={<TestPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/how-it-works" element={<HowItWorksPage />} />
             <Route path="/faq" element={<FAQPage />} />
