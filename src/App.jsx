@@ -4,6 +4,7 @@ import { PrivyProvider, usePrivy } from '@privy-io/react-auth';
 import { ToastContainer } from 'react-toastify';
 import { useUserStore } from './stores/userStore';
 import { usePostStore } from './stores/postStore';
+import { walletService } from './services/walletService';
 import NewNavbar from './components/NewNavbar';
 import RoleSelectionModal from './components/RoleSelectionModal';
 import Home from './pages/Home';
@@ -20,11 +21,12 @@ import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
 const AppContent = () => {
-  const { authenticated, ready } = usePrivy();
+  const { authenticated, ready, user } = usePrivy();
   const { loadUserRole, userRole, setUserRole } = useUserStore();
   const { initialize: initializePostStore } = usePostStore();
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [pendingLogin, setPendingLogin] = useState(false);
+  const [walletSetupComplete, setWalletSetupComplete] = useState(false);
 
   useEffect(() => {
     if (ready) {
@@ -35,6 +37,26 @@ const AppContent = () => {
       initializePostStore();
     }
   }, [ready, loadUserRole, initializePostStore]);
+
+  // Auto-create Aptos wallet when user authenticates
+  useEffect(() => {
+    const setupAptosWallet = async () => {
+      if (authenticated && ready && user?.id && !walletSetupComplete) {
+        try {
+          console.log('Setting up Aptos wallet for user:', user.id);
+          const aptosWallet = await walletService.ensureAptosWallet(user.id);
+          console.log('Aptos wallet ready:', aptosWallet);
+          setWalletSetupComplete(true);
+        } catch (error) {
+          console.error('Failed to setup Aptos wallet:', error);
+          // Don't block the app if wallet creation fails
+          setWalletSetupComplete(true);
+        }
+      }
+    };
+
+    setupAptosWallet();
+  }, [authenticated, ready, user?.id, walletSetupComplete]);
 
   // Handle role selection flow
   useEffect(() => {
@@ -133,7 +155,7 @@ const App = () => {
     <PrivyProvider
       appId={privyAppId}
       config={{
-        // Simple email and social login only - Privy handles wallet creation
+        // Enable email and Google login
         loginMethods: ['email', 'google'],
         appearance: {
           theme: 'light',
@@ -143,6 +165,12 @@ const App = () => {
           createOnLogin: 'users-without-wallets',
           requireUserPasswordOnCreate: false,
         },
+        // Google OAuth configuration (optional customization)
+        oauth: {
+          google: {
+            // You can customize Google OAuth here if needed
+          }
+        }
       }}
     >
       <AppContent />

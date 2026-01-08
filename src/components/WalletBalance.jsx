@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Wallet, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useUserStore } from '../stores/userStore';
+import { useMovementWallet } from '../hooks/useMovementWallet';
 import { formatTokenAmount } from '../utils/formatters';
 
 const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
   const { authenticated } = usePrivy();
-  const { balance, fetchBalance } = useUserStore();
+  const { balance, fetchBalance, isLoading } = useMovementWallet();
   
   const [showBalance, setShowBalance] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -50,12 +50,12 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       className={`
-        inline-flex items-center space-x-2 bg-gradient-to-r from-movement-50 to-purple-50 
-        dark:from-movement-900/30 dark:to-purple-900/30 rounded-lg border border-movement-200 
-        dark:border-movement-700 ${sizeClasses[size]} ${className}
+        inline-flex items-center space-x-2 bg-gradient-to-r from-green-50 to-blue-50 
+        dark:from-green-900/30 dark:to-blue-900/30 rounded-lg border border-green-200 
+        dark:border-green-700 ${sizeClasses[size]} ${className}
       `}
     >
-      <Wallet className={`${iconSizes[size]} text-movement-600 dark:text-movement-400 flex-shrink-0`} />
+      <Wallet className={`${iconSizes[size]} text-green-600 dark:text-green-400 flex-shrink-0`} />
       
       {showLabel && (
         <span className="text-gray-600 dark:text-gray-300 font-medium">
@@ -64,15 +64,15 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
       )}
       
       <div className="flex items-center space-x-1">
-        {isRefreshing ? (
+        {isRefreshing || isLoading ? (
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           >
-            <RefreshCw className={`${iconSizes[size]} text-movement-500`} />
+            <RefreshCw className={`${iconSizes[size]} text-green-500`} />
           </motion.div>
         ) : (
-          <span className="font-bold text-movement-700 dark:text-movement-300">
+          <span className="font-bold text-green-700 dark:text-green-300">
             {showBalance ? formatTokenAmount(balance) : '••••'} MOVE
           </span>
         )}
@@ -93,11 +93,11 @@ const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
         
         <button
           onClick={handleRefresh}
-          disabled={isRefreshing}
+          disabled={isRefreshing || isLoading}
           className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
           title="Refresh balance"
         >
-          <RefreshCw className={`${iconSizes[size]} ${isRefreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`${iconSizes[size]} ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
     </motion.div>

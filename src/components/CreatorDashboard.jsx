@@ -54,7 +54,7 @@ const CreatorDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">In Escrow</p>
-              <p className="text-2xl font-bold text-orange-600">{stats.escrowBalance.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-orange-600">{(stats.escrowBalance || 0).toFixed(2)}</p>
               <p className="text-xs text-gray-500">MOVE</p>
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">

@@ -1,77 +1,93 @@
 import { useState, useEffect } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useWallets, usePrivy } from '@privy-io/react-auth';
 import { movementService } from '../services/movementService';
-import { notify } from '../utils/notify';
+import { walletService } from '../services/walletService';
 
 export const useMovementWallet = () => {
-  const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const [wallet, setWallet] = useState(null);
+  const { user, authenticated } = usePrivy();
   const [balance, setBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [aptosWallet, setAptosWallet] = useState(null);
 
-  // Get the wallet from Privy
-  useEffect(() => {
-    if (authenticated && wallets.length > 0) {
-      // Privy creates embedded wallets - use the first one
-      const privyWallet = wallets[0];
-      setWallet(privyWallet);
-    } else {
-      setWallet(null);
-    }
-  }, [authenticated, wallets]);
+  // Find Aptos wallet (prioritize Aptos over embedded)
+  const movementWallet = wallets.find(w => 
+    w.chainType === 'aptos'
+  ) || wallets.find(w => 
+    w.walletClientType === 'privy'
+  );
 
-  // Fetch balance when wallet changes
+  // Ensure user has Aptos wallet
   useEffect(() => {
-    if (wallet?.address) {
+    const ensureAptosWallet = async () => {
+      if (authenticated && user?.id && !movementWallet) {
+        try {
+          console.log('Ensuring Aptos wallet exists...');
+          const wallet = await walletService.ensureAptosWallet(user.id);
+          setAptosWallet(wallet);
+        } catch (error) {
+          console.error('Failed to ensure Aptos wallet:', error);
+        }
+      }
+    };
+
+    ensureAptosWallet();
+  }, [authenticated, user?.id, movementWallet]);
+
+  // Fetch balance when wallet is available
+  useEffect(() => {
+    const walletAddress = movementWallet?.address || aptosWallet?.address;
+    if (walletAddress) {
       fetchBalance();
     }
-  }, [wallet?.address]);
+  }, [movementWallet?.address, aptosWallet?.address]);
 
   const fetchBalance = async () => {
-    if (!wallet?.address) return;
+    const walletAddress = movementWallet?.address || aptosWallet?.address;
+    if (!walletAddress) return;
     
+    setIsLoading(true);
     try {
-      const balance = await movementService.getBalance(wallet.address);
+      const balance = await movementService.getBalance(walletAddress);
       setBalance(balance);
     } catch (error) {
       console.error('Failed to fetch balance:', error);
-      setBalance(0);
-    }
-  };
-
-  // Sign and submit transaction to Move blockchain
-  const signAndSubmitTransaction = async (payload) => {
-    if (!wallet) {
-      throw new Error('No wallet connected');
-    }
-
-    setIsLoading(true);
-    try {
-      // Use Privy's wallet to sign and submit the transaction
-      const result = await wallet.signAndSubmitTransaction({
-        payload
-      });
-      
-      // Refresh balance after transaction
-      setTimeout(fetchBalance, 2000);
-      
-      return result;
-    } catch (error) {
-      console.error('Transaction failed:', error);
-      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Create wallet object for backend transactions
+  const wallet = movementWallet ? {
+    id: movementWallet.id,
+    address: movementWallet.address,
+    publicKey: movementWallet.publicKey,
+    chainType: movementWallet.chainType
+  } : aptosWallet ? {
+    id: aptosWallet.id,
+    address: aptosWallet.address,
+    publicKey: aptosWallet.publicKey,
+    chainType: 'aptos'
+  } : null;
+
   return {
     wallet,
-    address: wallet?.address,
     balance,
+    isConnected: !!wallet,
     isLoading,
     fetchBalance,
-    signAndSubmitTransaction,
-    isConnected: !!wallet
+    // Transaction methods that call backend
+    createSurvey: async (surveyData) => {
+      if (!wallet) throw new Error('Wallet not connected');
+      return await movementService.createSurvey(surveyData, wallet);
+    },
+    completeSurvey: async (surveyId) => {
+      if (!wallet) throw new Error('Wallet not connected');
+      return await movementService.completeSurvey(surveyId, wallet);
+    },
+    transfer: async (toAddress, amount) => {
+      if (!wallet) throw new Error('Wallet not connected');
+      return await movementService.transfer(toAddress, amount, wallet);
+    }
   };
 };

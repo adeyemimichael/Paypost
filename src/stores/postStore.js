@@ -16,27 +16,76 @@ export const usePostStore = create((set, get) => ({
     set({ isLoading: true });
     
     try {
-      console.log('🔄 Initializing post store with Supabase...');
+      console.log('🔄 Initializing post store...');
       
-      // Try Supabase first (primary data source)
-      const supabaseAvailable = await supabaseService.initialize();
-      if (supabaseAvailable) {
-        await get().loadSurveysFromSupabase();
+      // Try blockchain first, fallback to Supabase
+      const backendAvailable = await movementService.testConnection();
+      
+      if (backendAvailable) {
+        console.log('✅ Backend available, loading from blockchain...');
+        await get().loadSurveysFromChain();
         if (userAddress) {
-          await get().loadUserSupabaseActivity(userAddress);
+          await get().loadUserChainActivity(userAddress);
         }
-        console.log('✅ Loaded data from Supabase');
       } else {
-        // Fallback to mock data if Supabase fails
-        console.log('⚠️ Supabase unavailable, using mock data');
-        get().loadMockSurveys();
+        console.log('⚠️ Backend unavailable, falling back to Supabase...');
+        const supabaseAvailable = await supabaseService.initialize();
+        if (supabaseAvailable) {
+          await get().loadSurveysFromSupabase();
+          if (userAddress) {
+            await get().loadUserSupabaseActivity(userAddress);
+          }
+        } else {
+          console.log('⚠️ Supabase unavailable, using mock data');
+          get().loadMockSurveys();
+        }
       }
     } catch (error) {
       console.error('❌ Failed to initialize post store:', error);
-      // Always fallback to mock data on error
       get().loadMockSurveys();
     } finally {
       set({ isLoading: false, lastRefresh: Date.now() });
+    }
+  },
+
+  // Load surveys from blockchain via backend
+  loadSurveysFromChain: async () => {
+    try {
+      console.log('📊 Loading surveys from blockchain...');
+      const surveys = await movementService.getSurveys();
+      set({ posts: surveys });
+      console.log(`✅ Loaded ${surveys.length} surveys from blockchain`);
+    } catch (error) {
+      console.error('❌ Failed to load surveys from chain:', error);
+      throw error;
+    }
+  },
+
+  // Load user activity from blockchain
+  loadUserChainActivity: async (userAddress) => {
+    try {
+      console.log('👤 Loading user activity from blockchain...');
+      
+      const activity = await movementService.getUserActivity(userAddress);
+      set({ userEarnings: activity.totalEarnings || 0 });
+      
+      // Get completed surveys for this user
+      const { posts } = get();
+      const completed = new Set();
+      
+      await Promise.all(posts.map(async (post) => {
+        if (post.type === 'survey') {
+          const hasCompleted = await movementService.hasCompletedSurvey(userAddress, post.id);
+          if (hasCompleted) {
+            completed.add(post.id);
+          }
+        }
+      }));
+      
+      set({ completedSurveys: completed });
+      console.log(`✅ User has completed ${completed.size} surveys`);
+    } catch (error) {
+      console.error('❌ Failed to load user activity from blockchain:', error);
     }
   },
 
@@ -179,20 +228,58 @@ export const usePostStore = create((set, get) => ({
     set({ posts: mockSurveys });
   },
 
-  // Refresh data after user actions (Supabase-first)
+  // Refresh data after user actions
   refreshAfterAction: async (userAddress) => {
     set({ isLoading: true });
     try {
       console.log('🔄 Refreshing data after user action...');
-      await get().loadSurveysFromSupabase();
-      if (userAddress) {
-        await get().loadUserSupabaseActivity(userAddress);
+      
+      const backendAvailable = await movementService.testConnection();
+      if (backendAvailable) {
+        await get().loadSurveysFromChain();
+        if (userAddress) {
+          await get().loadUserChainActivity(userAddress);
+        }
+      } else {
+        await get().loadSurveysFromSupabase();
+        if (userAddress) {
+          await get().loadUserSupabaseActivity(userAddress);
+        }
       }
       console.log('✅ Data refreshed successfully');
     } catch (error) {
       console.error('❌ Failed to refresh data:', error);
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  // Transaction methods (call backend)
+  createSurvey: async (surveyData, wallet) => {
+    try {
+      const result = await movementService.createSurvey(surveyData, wallet);
+      // Refresh data after successful transaction
+      if (wallet?.address) {
+        setTimeout(() => get().refreshAfterAction(wallet.address), 2000);
+      }
+      return result;
+    } catch (error) {
+      console.error('Failed to create survey:', error);
+      throw error;
+    }
+  },
+
+  completeSurvey: async (surveyId, wallet) => {
+    try {
+      const result = await movementService.completeSurvey(surveyId, wallet);
+      // Refresh data after successful transaction
+      if (wallet?.address) {
+        setTimeout(() => get().refreshAfterAction(wallet.address), 2000);
+      }
+      return result;
+    } catch (error) {
+      console.error('Failed to complete survey:', error);
+      throw error;
     }
   },
 

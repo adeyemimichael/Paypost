@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Upload, CheckCircle, AlertCircle, User, FileText, DollarSign, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useUserStore } from '../stores/userStore';
+import { useMovementWallet } from '../hooks/useMovementWallet';
 import { fadeIn, slideUp } from '../animations/fadeIn';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -10,6 +11,7 @@ import { notify } from '../utils/notify';
 
 const CreatorApplicationPage = () => {
   const { isAuthenticated, login } = useUserStore();
+  const { balance } = useMovementWallet();
   const [formData, setFormData] = useState({
     creatorType: '',
     name: '',
@@ -154,7 +156,7 @@ const CreatorApplicationPage = () => {
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                   <div className="text-sm text-gray-500 mb-1">Your Balance</div>
                   <div className="text-2xl font-bold text-movement-600">
-                    {useUserStore.getState().balance.toFixed(2)} MOVE
+                    {(balance || 0).toFixed(2)} MOVE
                   </div>
                 </div>
               </div>

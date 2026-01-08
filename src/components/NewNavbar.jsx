@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { 
   Menu, 
   X, 
@@ -28,40 +28,31 @@ const Navbar = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   
   const { login, logout, authenticated, user: privyUser } = usePrivy();
-  const { aptosWallet, isCreating: isCreatingWallet } = useMovementWallet();
+  const { wallets } = useWallets();
+  const { createWallet } = useCreateWallet();
+  const { wallet, balance, isLoading } = useMovementWallet();
+
+  // Find the Aptos wallet specifically for display
+  const aptosWallet = wallets.find(w => w.chainType === 'aptos');
+  const displayWallet = aptosWallet || wallet;
   
   const { 
     userRole, 
     setUserRole, 
     setUser, 
     isCreator,
-    loadUserRole,
-    balance,
-    fetchBalance,
-    updateBalance
+    loadUserRole
   } = useUserStore();
 
-  // Load user role and balance on mount/auth change
+  // Load user role on mount/auth change
   useEffect(() => {
     if (authenticated && privyUser) {
-      // Use the Aptos wallet from our custom hook if available
-      if (aptosWallet) {
-        console.log("Using Aptos Wallet:", aptosWallet.address);
-        const userWithAptos = {
-          ...privyUser,
-          wallet: aptosWallet
-        };
-        setUser(userWithAptos);
-      } else {
-        setUser(privyUser);
-      }
-
+      setUser(privyUser);
       loadUserRole();
-      fetchBalance();
     } else {
       setUser(null);
     }
-  }, [authenticated, privyUser, aptosWallet, setUser, loadUserRole, fetchBalance]);
+  }, [authenticated, privyUser, setUser, loadUserRole]);
 
   const handleConnect = async () => {
     try {
@@ -107,8 +98,22 @@ const Navbar = () => {
   // Helper to get display identifier (email or wallet)
   const getUserIdentifier = () => {
     if (privyUser?.email?.address) return privyUser.email.address;
-    if (privyUser?.wallet?.address) return formatAddress(privyUser.wallet.address);
+    if (displayWallet?.address) return formatAddress(displayWallet.address);
     return 'User';
+  };
+
+  // Check if user has Aptos wallet for Movement
+  const hasAptosWallet = wallets.some(w => w.chainType === 'aptos');
+  const needsAptosWallet = authenticated && !hasAptosWallet;
+
+  const handleCreateAptosWallet = async () => {
+    try {
+      await createWallet({ chainType: 'aptos' });
+      notify.success('Aptos wallet created! You can now use Movement features.');
+    } catch (error) {
+      console.error('Failed to create Aptos wallet:', error);
+      notify.error('Failed to create Aptos wallet. Please try again.');
+    }
   };
 
   return (
@@ -178,7 +183,7 @@ const Navbar = () => {
               <div className="hidden sm:flex items-center space-x-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg px-3 py-2 border border-green-200">
                 <Wallet className="w-4 h-4 text-green-600" />
                 <span className="font-bold text-green-700">
-                  {balance.toFixed(2)} MOVE
+                  {isLoading ? '...' : `${(balance || 0).toFixed(2)}`} MOVE
                 </span>
               </div>
             )}
@@ -206,7 +211,7 @@ const Navbar = () => {
                       {getUserIdentifier()}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {userRole || 'No role'} • {balance.toFixed(2)} MOVE
+                      {userRole || 'No role'} • {isLoading ? '...' : `${(balance || 0).toFixed(2)}`} MOVE
                     </div>
                   </div>
                   <ChevronDown className="w-4 h-4 text-gray-500" />
@@ -245,11 +250,6 @@ const Navbar = () => {
                                 Copy
                               </button>
                             </div>
-                            {privyUser.wallet.chainType && (
-                              <div className="text-[10px] text-gray-400 mt-1 uppercase">
-                                Type: {privyUser.wallet.chainType}
-                              </div>
-                            )}
                           </div>
                         ) : (
                           <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
@@ -259,29 +259,15 @@ const Navbar = () => {
                           </div>
                         )}
 
-                        <div className="text-xs text-gray-500 mt-2">
-                          Balance: {balance.toFixed(2)} MOVE
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          Role: {userRole || 'Not set'}
-                        </div>
+                    <div className="text-xs text-gray-500">
+                      Role: {userRole || 'Not set'}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Balance: {isLoading ? '...' : `${(balance || 0).toFixed(2)}`} MOVE
+                    </div>
                       </div>
 
                       {/* Disconnect */}
-                      {isCreator() && (
-                        <button
-                          onClick={() => {
-                            const currentBalance = balance;
-                            updateBalance(currentBalance + 100);
-                            notify.success('Added 100 MOVE tokens!');
-                          }}
-                          className="w-full px-4 py-2 text-left text-sm text-green-600 hover:bg-green-50 border-b border-gray-100"
-                        >
-                          <Coins className="w-4 h-4 inline mr-2" />
-                          Get 100 MOVE (Faucet)
-                        </button>
-                      )}
-                      
                       <button
                         onClick={handleDisconnect}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
@@ -365,7 +351,7 @@ const Navbar = () => {
                 <div className="flex items-center space-x-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg px-3 py-2 border border-green-200">
                   <Wallet className="w-4 h-4 text-green-600" />
                   <span className="font-bold text-green-700">
-                    {balance.toFixed(2)} MOVE
+                    {isLoading ? '...' : `${(balance || 0).toFixed(2)}`} MOVE
                   </span>
                 </div>
               </div>

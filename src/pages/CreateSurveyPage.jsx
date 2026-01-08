@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
+import { usePostStore } from '../stores/postStore';
 import { useMovementWallet } from '../hooks/useMovementWallet';
 import { movementService } from '../services/movementService';
 import { fadeIn, slideUp } from '../animations/fadeIn';
@@ -24,12 +25,9 @@ import { notify } from '../utils/notify';
 const CreateSurveyPage = () => {
   const navigate = useNavigate();
   const { authenticated } = usePrivy();
-  const { signAndSubmitTransaction, balance, isLoading: walletLoading } = useMovementWallet();
-  const { 
-    userRole, 
-    isCreator, 
-    updateBalance
-  } = useUserStore();
+  const { wallet, balance, createSurvey: walletCreateSurvey } = useMovementWallet();
+  const { isCreator } = useUserStore();
+  const { createSurvey } = usePostStore();
   
   const [isLoading, setIsLoading] = useState(false);
   
@@ -145,8 +143,8 @@ const CreateSurveyPage = () => {
     
     const totalCost = calculateTotalCost();
     
-    if (balance < totalCost) {
-      return `Insufficient balance. You need ${totalCost.toFixed(2)} MOVE but only have ${balance.toFixed(2)} MOVE`;
+    if ((balance || 0) < totalCost) {
+      return `Insufficient balance. You need ${totalCost.toFixed(2)} MOVE but only have ${(balance || 0).toFixed(2)} MOVE`;
     }
     
     for (let question of surveyData.questions) {
@@ -169,7 +167,7 @@ const CreateSurveyPage = () => {
       return;
     }
 
-    if (!authenticated) {
+    if (!authenticated || !wallet) {
       notify.error('Please connect your wallet first');
       return;
     }
@@ -177,21 +175,20 @@ const CreateSurveyPage = () => {
     setIsLoading(true);
     
     try {
-      // Create survey payload for Move contract
-      const payload = movementService.createSurveyPayload(
-        surveyData.title,
-        surveyData.description,
-        surveyData.rewardAmount,
-        surveyData.maxResponses,
-        surveyData.durationDays * 24 * 60 * 60 // Convert days to seconds
-      );
+      // Create survey data
+      const newSurveyData = {
+        title: surveyData.title,
+        description: surveyData.description,
+        rewardAmount: surveyData.rewardAmount,
+        maxResponses: surveyData.maxResponses
+      };
 
-      // Submit transaction to Move blockchain
-      const result = await signAndSubmitTransaction(payload);
+      // Submit to backend for signing and execution
+      const result = await createSurvey(newSurveyData, wallet);
       
       console.log('Survey created on blockchain:', result);
       
-      notify.success(`Survey created successfully! Transaction: ${result.hash}`);
+      notify.success(`Survey created successfully! Transaction: ${result.transactionHash}`);
       navigate('/feed');
 
     } catch (error) {
@@ -251,7 +248,7 @@ const CreateSurveyPage = () => {
                 <div className="text-left">
                   <div className="text-sm opacity-90">Available Balance</div>
                   <div className="text-xl font-bold">
-                    {balance.toFixed(2)} MOVE
+                    {(balance || 0).toFixed(2)} MOVE
                   </div>
                 </div>
               </div>
