@@ -27,6 +27,50 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint to test wallet data
+app.post('/api/debug/wallet', async (req, res) => {
+  try {
+    const { walletId } = req.body;
+    
+    if (!walletId) {
+      return res.status(400).json({ error: 'walletId is required' });
+    }
+
+    console.log('🔍 DEBUG: Getting wallet info for:', walletId);
+    
+    // Get wallet from Privy
+    const wallet = await privy.wallets().get(walletId);
+    
+    console.log('🔍 DEBUG: Raw wallet from Privy:', {
+      id: wallet.id,
+      address: wallet.address,
+      chain_type: wallet.chain_type,
+      public_key: wallet.public_key,
+      public_key_type: typeof wallet.public_key,
+      public_key_length: wallet.public_key?.length
+    });
+
+    res.json({
+      success: true,
+      wallet: {
+        id: wallet.id,
+        address: wallet.address,
+        chainType: wallet.chain_type,
+        publicKey: wallet.public_key,
+        publicKeyType: typeof wallet.public_key,
+        publicKeyLength: wallet.public_key?.length
+      }
+    });
+
+  } catch (error) {
+    console.error('🔍 DEBUG: Failed to get wallet info:', error);
+    res.status(500).json({ 
+      error: 'Failed to get wallet info',
+      details: error.message 
+    });
+  }
+});
+
 // Wallet management endpoints
 app.post('/api/wallets/create-aptos', async (req, res) => {
   try {

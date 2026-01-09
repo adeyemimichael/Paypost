@@ -32,23 +32,47 @@ export class TransactionService {
     try {
       console.log('🔄 Building transaction for:', address);
       console.log('📋 Transaction payload:', JSON.stringify(transactionPayload, null, 2));
-      console.log('🔑 PublicKey:', publicKey);
+      console.log('🔑 PublicKey (raw):', publicKey);
+      console.log('🔑 PublicKey type:', typeof publicKey);
+      console.log('🔑 PublicKey length:', publicKey?.length);
       console.log('🆔 WalletId:', walletId);
 
       // Clean and validate inputs
       const cleanAddress = address.startsWith('0x') ? address : `0x${address}`;
       let cleanPublicKey = publicKey;
       
-      // Handle publicKey formatting
+      // Handle publicKey formatting - ensure exactly 64 hex characters
       if (typeof publicKey === 'string') {
+        console.log('🔍 Original publicKey:', publicKey);
+        
+        // Remove 0x prefix if present
         if (publicKey.startsWith('0x')) {
           cleanPublicKey = publicKey.slice(2);
-        } else if (publicKey.startsWith('00') && publicKey.length === 66) {
-          cleanPublicKey = publicKey.slice(2);
+          console.log('🔍 After removing 0x:', cleanPublicKey);
         }
         
+        // Handle case where publicKey is 66 chars (with leading 00)
+        if (cleanPublicKey.length === 66 && cleanPublicKey.startsWith('00')) {
+          cleanPublicKey = cleanPublicKey.slice(2);
+          console.log('🔍 After removing leading 00:', cleanPublicKey);
+        }
+        
+        // Handle case where publicKey is 130 chars (65 bytes with 0x prefix removed)
+        if (cleanPublicKey.length === 130) {
+          // This might be a compressed public key, take the last 64 chars
+          cleanPublicKey = cleanPublicKey.slice(-64);
+          console.log('🔍 After taking last 64 chars from 130-char key:', cleanPublicKey);
+        }
+        
+        // Validate final length
         if (cleanPublicKey.length !== 64) {
-          throw new Error(`Invalid publicKey length: ${cleanPublicKey.length}. Expected 64 hex characters.`);
+          console.error(`❌ PublicKey validation failed:`, {
+            original: publicKey,
+            cleaned: cleanPublicKey,
+            originalLength: publicKey.length,
+            cleanedLength: cleanPublicKey.length
+          });
+          throw new Error(`Invalid publicKey length: ${cleanPublicKey.length}. Expected 64 hex characters (32 bytes). Got: ${publicKey}`);
         }
       }
 
@@ -76,20 +100,61 @@ export class TransactionService {
         params: { hash: toHex(message) }
       });
       
+      console.log('🔍 Raw signature response:', signatureResponse);
+      console.log('🔍 Signature type:', typeof signatureResponse);
+      console.log('🔍 Signature length:', signatureResponse?.length);
+      
       let cleanSignature = signatureResponse;
-      if (typeof signatureResponse === 'string' && signatureResponse.startsWith('0x')) {
-        cleanSignature = signatureResponse.slice(2);
+      if (typeof signatureResponse === 'string') {
+        if (signatureResponse.startsWith('0x')) {
+          cleanSignature = signatureResponse.slice(2);
+          console.log('🔍 Signature after removing 0x:', cleanSignature);
+        }
       }
       
-      console.log('✅ Signature received, length:', cleanSignature.length);
+      // Validate signature length (should be 128 hex chars = 64 bytes)
+      if (cleanSignature.length !== 128) {
+        console.error(`❌ Signature validation failed:`, {
+          original: signatureResponse,
+          cleaned: cleanSignature,
+          originalLength: typeof signatureResponse === 'string' ? signatureResponse.length : 'not string',
+          cleanedLength: cleanSignature.length
+        });
+        throw new Error(`Invalid signature length: ${cleanSignature.length}. Expected 128 hex characters (64 bytes).`);
+      }
+      
+      console.log('✅ Signature received and validated, length:', cleanSignature.length);
 
       // 4. Create authenticator
-      const senderAuthenticator = new AccountAuthenticatorEd25519(
-        new Ed25519PublicKey(cleanPublicKey),
-        new Ed25519Signature(cleanSignature)
-      );
-
-      console.log('✅ Authenticator created');
+      console.log('🔧 Creating Ed25519 objects...');
+      console.log('🔧 PublicKey for Ed25519PublicKey:', cleanPublicKey);
+      console.log('🔧 Signature for Ed25519Signature:', cleanSignature);
+      
+      let ed25519PublicKey, ed25519Signature, senderAuthenticator;
+      
+      try {
+        ed25519PublicKey = new Ed25519PublicKey(cleanPublicKey);
+        console.log('✅ Ed25519PublicKey created successfully');
+      } catch (error) {
+        console.error('❌ Failed to create Ed25519PublicKey:', error);
+        throw new Error(`Failed to create Ed25519PublicKey: ${error.message}`);
+      }
+      
+      try {
+        ed25519Signature = new Ed25519Signature(cleanSignature);
+        console.log('✅ Ed25519Signature created successfully');
+      } catch (error) {
+        console.error('❌ Failed to create Ed25519Signature:', error);
+        throw new Error(`Failed to create Ed25519Signature: ${error.message}`);
+      }
+      
+      try {
+        senderAuthenticator = new AccountAuthenticatorEd25519(ed25519PublicKey, ed25519Signature);
+        console.log('✅ AccountAuthenticatorEd25519 created successfully');
+      } catch (error) {
+        console.error('❌ Failed to create AccountAuthenticatorEd25519:', error);
+        throw new Error(`Failed to create AccountAuthenticatorEd25519: ${error.message}`);
+      }
 
       // 5. Submit transaction
       const pending = await aptos.transaction.submit.simple({
@@ -120,18 +185,35 @@ export class TransactionService {
 
   // Transaction payload builders
   buildCreateSurveyPayload(title, description, rewardAmount, maxResponses) {
+    // Convert strings to byte arrays
     const titleBytes = Array.from(new TextEncoder().encode(title));
     const descBytes = Array.from(new TextEncoder().encode(description));
+    
+    // Convert reward amount to octas (1 MOVE = 100,000,000 octas)
     const rewardOctas = Math.floor(rewardAmount * 100000000);
+    
+    // Duration in seconds (7 days)
+    const durationSeconds = 604800;
+
+    console.log('📋 Building survey payload:', {
+      title,
+      description,
+      titleBytes: titleBytes.length,
+      descBytes: descBytes.length,
+      rewardAmount,
+      rewardOctas,
+      maxResponses,
+      durationSeconds
+    });
 
     return {
-      function: `${MODULE_ADDRESS}::${MODULE_NAME}::create_and_fund_survey`,
+      function: `${MODULE_ADDRESS}::ContentPlatform::create_and_fund_survey`,
       functionArguments: [
         titleBytes,
         descBytes,
         rewardOctas,
         maxResponses,
-        604800 // 7 days duration
+        durationSeconds
       ]
     };
   }
