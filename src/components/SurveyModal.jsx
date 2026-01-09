@@ -4,7 +4,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { X, CheckCircle, Clock, Users, Gift, AlertCircle } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
-import { useSurveyStore } from '../stores/surveyStore';
+import { useWalletStore } from '../stores/walletStore';
 import { formatPrice } from '../utils/formatters';
 import { scaleIn } from '../animations/fadeIn';
 import { notify } from '../utils/notify';
@@ -12,24 +12,27 @@ import Button from './Button';
 
 const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
   const { user } = usePrivy();
-  const { balance } = useUserStore();
-  const { getDatabaseUserId } = useUserStore();
-  const { completeSurvey, isLoading } = usePostStore();
-  const { hasCompletedSurvey, addCompletedSurvey, incrementSurveyResponses } = useSurveyStore();
+  const { userRole } = useUserStore();
+  const { completeSurvey, hasUserCompletedSurvey, completedSurveys } = usePostStore();
+  const { wallet, fetchBalance } = useWalletStore();
   
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Debug logging
-  console.log('SurveyModal props:', { isOpen, post: !!post });
-  if (post) {
-    console.log('Post questions:', post.questions);
-  }
-
-  // Check if already completed
-  const alreadyCompleted = post ? hasCompletedSurvey(post.id) : false;
+  // Check if already completed using the postStore method
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false);
+  
+  useEffect(() => {
+    const checkCompletion = async () => {
+      if (post && wallet?.address) {
+        const completed = await hasUserCompletedSurvey(wallet.address, post.id);
+        setAlreadyCompleted(completed);
+      }
+    };
+    checkCompletion();
+  }, [post, wallet?.address, hasUserCompletedSurvey]);
 
   if (!isOpen || !post) {
     return null;
@@ -114,36 +117,35 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
   };
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !wallet) return;
     
     setIsSubmitting(true);
     try {
-      // Add to completed surveys
-      const success = addCompletedSurvey(post.id, post.reward || post.rewardAmount);
-      
-      if (!success) {
-        notify.error('You have already completed this survey');
-        return;
-      }
+      console.log('Completing survey on blockchain...', {
+        surveyId: post.id,
+        wallet: wallet.address,
+        responses
+      });
 
-      // Increment response count for the survey
-      incrementSurveyResponses(post.id);
+      // Complete survey on blockchain (this pays the participant)
+      const result = await completeSurvey(post.id, wallet);
       
-      // Update user balance (simulate receiving tokens)
-      const currentBalance = balance;
-      const newBalance = currentBalance + (post.reward || post.rewardAmount);
-      useUserStore.setState({ balance: newBalance });
+      console.log('✅ Survey completed on blockchain:', result);
+      
+      // Refresh wallet balance to show new tokens
+      setTimeout(() => fetchBalance(), 2000);
       
       // Optional: Call onSubmit callback if provided
       if (onSubmit) {
         await onSubmit(responses);
       }
       
-      notify.success(`Survey completed! You earned ${post.reward || post.rewardAmount} MOVE`);
+      notify.success(`Survey completed! You earned ${formatPrice(post.reward || post.rewardAmount)} MOVE`);
       setIsCompleted(true);
+      
     } catch (error) {
       console.error('Failed to complete survey:', error);
-      notify.error('Failed to complete survey');
+      notify.error(`Failed to complete survey: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -341,7 +343,7 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
                   <Button
                     onClick={handleNext}
                     disabled={!isCurrentQuestionAnswered()}
-                    loading={isLoading && currentStep === post.questions.length - 1}
+                    loading={isSubmitting && currentStep === post.questions.length - 1}
                   >
                     {currentStep === post.questions.length - 1 ? 'Submit Survey' : 'Next'}
                   </Button>

@@ -413,6 +413,26 @@ export const usePostStore = create((set, get) => ({
     return stats;
   },
 
+  // Check if user has completed a specific survey
+  hasUserCompletedSurvey: async (userAddress, surveyId) => {
+    try {
+      // First check blockchain
+      const hasCompleted = await movementService.hasCompletedSurvey(userAddress, surveyId);
+      if (hasCompleted) return true;
+      
+      // Fallback to Supabase check
+      const user = await supabaseService.getUser(userAddress);
+      if (user) {
+        return await supabaseService.hasCompletedSurvey(surveyId, user.id);
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Failed to check survey completion:', error);
+      return false;
+    }
+  },
+
   completeSurvey: async (surveyId, wallet) => {
     try {
       const result = await movementService.completeSurvey(surveyId, wallet);
