@@ -169,6 +169,23 @@ export const movementService = {
   },
 
   /**
+   * Get creator's escrowed funds from blockchain
+   */
+  async getCreatorEscrow(address) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/creator-escrow/${address}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch creator escrow');
+      }
+      const data = await response.json();
+      return data.totalEscrow;
+    } catch (error) {
+      console.error('Failed to get creator escrow:', error);
+      return 0;
+    }
+  },
+
+  /**
    * Test backend connection
    */
   async testConnection() {

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabaseService } from '../services/supabaseService';
 import { movementService } from '../services/movementService';
+import { movementService } from '../services/movementService';
 
 export const usePostStore = create((set, get) => ({
   posts: [], 
@@ -305,8 +306,14 @@ export const usePostStore = create((set, get) => ({
 
       console.log('✅ Survey created in database:', survey);
 
-      // Step 4: Refresh the surveys list
-      setTimeout(() => get().loadSurveysFromSupabase(), 1000);
+      // Step 4: Refresh the surveys list and user balance
+      setTimeout(() => {
+        get().loadSurveysFromSupabase();
+        // Also refresh wallet balance since money was deducted
+        if (typeof window !== 'undefined' && window.useWalletStore) {
+          window.useWalletStore.getState().fetchBalance();
+        }
+      }, 1000);
 
       return {
         success: true,
@@ -354,8 +361,8 @@ export const usePostStore = create((set, get) => ({
     }
   },
 
-  // Get creator stats
-  getCreatorStats: (walletAddress) => {
+  // Get creator stats (with blockchain escrow data)
+  getCreatorStats: async (walletAddress) => {
     const { posts } = get();
     
     if (!walletAddress) {
@@ -374,24 +381,37 @@ export const usePostStore = create((set, get) => ({
              post.creator_wallet_address === walletAddress;
     });
 
-    console.log('Creator surveys found:', creatorSurveys.length, 'for wallet:', walletAddress);
-
     const totalResponses = creatorSurveys.reduce((sum, survey) => 
       sum + (survey.current_responses || 0), 0
     );
 
     const activeSurveys = creatorSurveys.filter(survey => survey.is_active).length;
 
-    // Calculate escrow balance (remaining rewards to be paid out)
-    const escrowBalance = creatorSurveys.reduce((sum, survey) => {
-      const remainingResponses = (survey.max_responses || 0) - (survey.current_responses || 0);
-      const rewardPerResponse = survey.reward_amount || 0;
-      return sum + (remainingResponses * rewardPerResponse);
-    }, 0);
+    // Get real escrow balance from blockchain
+    let escrowBalance = 0;
+    try {
+      escrowBalance = await movementService.getCreatorEscrow(walletAddress);
+    } catch (error) {
+      console.error('Failed to get blockchain escrow:', error);
+      // Fallback to calculated escrow from database
+      escrowBalance = creatorSurveys.reduce((sum, survey) => {
+        if (survey.is_active) {
+          const remainingResponses = (survey.max_responses || 0) - (survey.current_responses || 0);
+          const rewardPerResponse = survey.reward_amount || 0;
+          return sum + (remainingResponses * rewardPerResponse);
+        }
+        return sum;
+      }, 0);
+    }
 
     const stats = {
       totalSurveys: creatorSurveys.length,
       activeSurveys,
+      totalResponses,
+      escrowBalance
+    };
+
+    return stats;
       totalResponses,
       escrowBalance
     };

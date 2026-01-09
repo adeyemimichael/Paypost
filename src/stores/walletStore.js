@@ -95,13 +95,19 @@ export const useWalletStore = create(
       createSurvey: async (surveyData) => {
         const { wallet } = get();
         if (!wallet) throw new Error('Wallet not initialized');
-        return await movementService.createSurvey(surveyData, wallet);
+        const result = await movementService.createSurvey(surveyData, wallet);
+        // Refresh balance after transaction
+        setTimeout(() => get().fetchBalance(), 2000);
+        return result;
       },
 
       completeSurvey: async (surveyId) => {
         const { wallet } = get();
         if (!wallet) throw new Error('Wallet not initialized');
-        return await movementService.completeSurvey(surveyId, wallet);
+        const result = await movementService.completeSurvey(surveyId, wallet);
+        // Refresh balance after transaction
+        setTimeout(() => get().fetchBalance(), 2000);
+        return result;
       },
 
       transfer: async (toAddress, amount) => {

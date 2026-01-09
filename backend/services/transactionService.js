@@ -285,6 +285,29 @@ export class TransactionService {
       return false;
     }
   }
+
+  async getCreatorEscrow(address) {
+    try {
+      // Get all surveys created by this address
+      const surveys = await this.getSurveys();
+      const creatorSurveys = surveys.filter(s => s.creator.toLowerCase() === address.toLowerCase());
+      
+      // Calculate total escrowed funds (remaining_funds for active surveys)
+      let totalEscrow = 0;
+      creatorSurveys.forEach(survey => {
+        if (survey.isActive) {
+          // For active surveys, escrow = remaining rewards that can be paid out
+          const remainingRewards = (survey.maxResponses - survey.responses) * survey.reward;
+          totalEscrow += remainingRewards;
+        }
+      });
+      
+      return totalEscrow;
+    } catch (error) {
+      console.error('Failed to calculate creator escrow:', error);
+      return 0;
+    }
+  }
 }
 
 export const transactionService = new TransactionService();

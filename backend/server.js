@@ -151,6 +151,21 @@ app.get('/api/wallets/:walletId/complete', async (req, res) => {
   }
 });
 
+// Get creator's escrowed funds
+app.get('/api/creator-escrow/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+    const totalEscrow = await transactionService.getCreatorEscrow(address);
+    res.json({ success: true, totalEscrow });
+  } catch (error) {
+    console.error('Failed to get creator escrow:', error);
+    res.status(500).json({ 
+      error: 'Failed to get creator escrow',
+      details: error.message 
+    });
+  }
+});
+
 // Transaction endpoints
 app.post('/api/transactions/create-survey', async (req, res) => {
   try {

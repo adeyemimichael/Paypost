@@ -10,34 +10,39 @@ const CreatorDashboard = () => {
   const { getCreatorSurveys, getCreatorStats, posts } = usePostStore();
   const { wallet } = useMovementWallet();
   const [createdSurveys, setCreatedSurveys] = useState([]);
+  const [stats, setStats] = useState({
+    totalSurveys: 0,
+    activeSurveys: 0,
+    totalResponses: 0,
+    escrowBalance: 0
+  });
   const [loading, setLoading] = useState(true);
 
-  // Load creator's surveys
+  // Load creator's surveys and stats
   useEffect(() => {
-    const loadCreatorSurveys = async () => {
+    const loadCreatorData = async () => {
       if (!wallet?.address) return;
       
       setLoading(true);
       try {
+        // Load surveys
         const surveys = await getCreatorSurveys(wallet.address);
         setCreatedSurveys(surveys);
-        console.log('Loaded creator surveys:', surveys);
+        
+        // Load stats (including blockchain escrow)
+        const creatorStats = await getCreatorStats(wallet.address);
+        setStats(creatorStats);
+        
+        console.log('Loaded creator data:', { surveys, stats: creatorStats });
       } catch (error) {
-        console.error('Failed to load creator surveys:', error);
+        console.error('Failed to load creator data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadCreatorSurveys();
-  }, [wallet?.address, getCreatorSurveys, posts]); // Added posts dependency to refresh when surveys change
-
-  const stats = wallet?.address ? getCreatorStats(wallet.address) : {
-    totalSurveys: 0,
-    activeSurveys: 0,
-    totalResponses: 0,
-    escrowBalance: 0
-  };
+    loadCreatorData();
+  }, [wallet?.address, getCreatorSurveys, getCreatorStats, posts]); // Added posts dependency to refresh when surveys change
 
   console.log('Current stats:', stats, 'for wallet:', wallet?.address);
 
