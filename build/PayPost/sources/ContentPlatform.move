@@ -30,6 +30,7 @@ module PayPost::ContentPlatform {
         is_active: bool,
         created_at: u64,
         expires_at: u64,
+        funds: coin::Coin<AptosCoin>, // Store funds directly in the survey
     }
 
     /// User activity tracking
@@ -55,12 +56,6 @@ module PayPost::ContentPlatform {
         next_survey_id: u64,
         total_rewards_distributed: u64,
         platform_fee_rate: u64,  // Fee rate in basis points (e.g., 250 = 2.5%)
-    }
-
-    /// Survey funding pool - holds tokens for rewards
-    struct SurveyFunds has key {
-        survey_id: u64,
-        funds: coin::Coin<AptosCoin>,
     }
 
     // Events
@@ -146,15 +141,9 @@ module PayPost::ContentPlatform {
             is_active: true,
             created_at: now,
             expires_at: now + duration_seconds,
-        };
-
-        // Store funding in survey-specific resource
-        let survey_funds = SurveyFunds {
-            survey_id: registry.next_survey_id,
             funds: funding,
         };
-        
-        move_to(creator, survey_funds);
+
         vector::push_back(&mut registry.surveys, survey);
         
         event::emit(SurveyCreatedEvent {
@@ -180,7 +169,7 @@ module PayPost::ContentPlatform {
         participant: &signer,
         survey_id: u64,
         response_hash: vector<u8>,
-    ) acquires SurveyRegistry, UserActivity, SurveyFunds {
+    ) acquires SurveyRegistry, UserActivity {
         let participant_addr = signer::address_of(participant);
         let registry = borrow_global_mut<SurveyRegistry>(@PayPost);
         
@@ -202,13 +191,12 @@ module PayPost::ContentPlatform {
             assert!(!vector::contains(&user_activity.completed_surveys, &survey_id), E_ALREADY_COMPLETED);
         };
 
-        // Get survey creator address before borrowing funds
+        // Get survey creator address
         let creator_addr = survey.creator;
         let reward_amount = survey.reward_amount;
 
-        // Get survey funds and pay participant
-        let survey_funds = borrow_global_mut<SurveyFunds>(creator_addr);
-        let reward = coin::extract(&mut survey_funds.funds, reward_amount);
+        // Extract reward from survey funds
+        let reward = coin::extract(&mut survey.funds, reward_amount);
         coin::deposit(participant_addr, reward);
 
         // Update survey state
@@ -255,9 +243,9 @@ module PayPost::ContentPlatform {
             survey.is_active = false;
             
             // Refund remaining funds to creator
-            let refund_amount = survey.remaining_funds;
+            let refund_amount = coin::value(&survey.funds);
             if (refund_amount > 0) {
-                let refund = coin::extract(&mut survey_funds.funds, refund_amount);
+                let refund = coin::extract(&mut survey.funds, refund_amount);
                 coin::deposit(creator_addr, refund);
                 survey.remaining_funds = 0;
             };
@@ -275,7 +263,7 @@ module PayPost::ContentPlatform {
     public entry fun close_survey(
         creator: &signer,
         survey_id: u64,
-    ) acquires SurveyRegistry, SurveyFunds {
+    ) acquires SurveyRegistry {
         let creator_addr = signer::address_of(creator);
         let registry = borrow_global_mut<SurveyRegistry>(@PayPost);
         
@@ -289,10 +277,9 @@ module PayPost::ContentPlatform {
         survey.is_active = false;
         
         // Refund remaining funds to creator
-        let refund_amount = survey.remaining_funds;
+        let refund_amount = coin::value(&survey.funds);
         if (refund_amount > 0) {
-            let survey_funds = borrow_global_mut<SurveyFunds>(creator_addr);
-            let refund = coin::extract(&mut survey_funds.funds, refund_amount);
+            let refund = coin::extract(&mut survey.funds, refund_amount);
             coin::deposit(creator_addr, refund);
             survey.remaining_funds = 0;
         };

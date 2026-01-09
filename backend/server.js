@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { PrivyClient } from '@privy-io/node';
 import { transactionService } from './services/transactionService.js';
 
+console.log('🔄 Server.js loaded at:', new Date().toISOString());
+
 dotenv.config();
 
 const app = express();
@@ -17,7 +19,15 @@ const privy = new PrivyClient({
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: [
+    'http://localhost:5173', 
+    'http://localhost:5174', 
+    'http://localhost:5175', 
+    'http://localhost:3000',
+    'https://paypost.vercel.app',
+    'https://paypost-7jthfan6v-adeyemimichaels-projects.vercel.app',
+    'https://paypost-cgvzsv0c2-adeyemimichaels-projects.vercel.app'
+  ],
   credentials: true
 }));
 app.use(express.json());
@@ -29,6 +39,48 @@ app.get('/health', (req, res) => {
 
 // Simple in-memory user-wallet mapping (in production, use a database)
 const userWalletMapping = new Map();
+
+// Helper function to find wallet by user ID from Privy API
+async function findUserWalletFromPrivy(userId) {
+  try {
+    console.log('🔍 Searching for wallet in Privy for user:', userId);
+    
+    // Get all wallets from Privy
+    const allWallets = await privy.wallets().list();
+    console.log('📊 Total wallets in Privy:', allWallets.length);
+    
+    // Try to find wallet by matching user ID patterns
+    const userIdShort = userId.split(':').pop(); // Extract the short ID from did:privy:xxx
+    
+    const matchingWallets = allWallets.filter(wallet => {
+      if (!wallet.owner_id) return false;
+      
+      // Check exact match or partial match
+      return wallet.owner_id === userId || 
+             wallet.owner_id === userIdShort ||
+             wallet.owner_id.includes(userIdShort);
+    });
+    
+    console.log('🎯 Found matching wallets:', matchingWallets.length);
+    
+    // Find Aptos wallet specifically
+    const aptosWallet = matchingWallets.find(w => w.chain_type === 'aptos');
+    
+    if (aptosWallet) {
+      console.log('✅ Found existing Aptos wallet:', aptosWallet.address);
+      // Update our mapping
+      userWalletMapping.set(userId, aptosWallet.id);
+      return aptosWallet;
+    }
+    
+    console.log('⚠️ No Aptos wallet found for user');
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Error searching for user wallet:', error);
+    return null;
+  }
+}
 
 // Wallet management endpoints
 app.post('/api/wallets/create-aptos', async (req, res) => {
@@ -222,9 +274,25 @@ app.get('/api/creator-escrow/:address', async (req, res) => {
   }
 });
 
-// Transaction endpoints
+// Test endpoint
+app.get('/api/test', (req, res) => {
+  console.log('🧪 TEST ENDPOINT CALLED');
+  res.json({ message: 'Test endpoint working', timestamp: new Date().toISOString() });
+});
+
+// Debug endpoint for create survey
+app.post('/api/debug-create-survey', async (req, res) => {
+  console.log('🔍 DEBUG CREATE SURVEY CALLED');
+  console.log('🔍 Request body:', JSON.stringify(req.body, null, 2));
+  res.json({ message: 'Debug endpoint working', body: req.body });
+});
+
+// Create and fund a survey on Movement blockchain
 app.post('/api/transactions/create-survey', async (req, res) => {
+  console.log('🚀 CREATE SURVEY ENDPOINT CALLED');
   try {
+    console.log('🚀 Create survey endpoint called with:', JSON.stringify(req.body, null, 2));
+    
     const { walletId, publicKey, address, surveyData } = req.body;
     
     if (!walletId || !publicKey || !address || !surveyData) {
@@ -233,12 +301,66 @@ app.post('/api/transactions/create-survey', async (req, res) => {
       });
     }
 
-    const payload = transactionService.buildCreateSurveyPayload(
-      surveyData.title,
-      surveyData.description,
-      surveyData.rewardAmount,
-      surveyData.maxResponses
-    );
+    // Check user balance before creating survey
+    console.log('💰 Checking balance for address:', address);
+    const balance = await transactionService.getBalance(address);
+    const rewardAmount = surveyData.rewardAmount;
+    const maxResponses = surveyData.maxResponses;
+    const totalRewards = rewardAmount * maxResponses;
+    const platformFee = (totalRewards * 250) / 10000; // 2.5% platform fee
+    const totalRequired = totalRewards + platformFee;
+
+    console.log('💰 Balance check:', {
+      userBalance: balance,
+      totalRequired,
+      totalRewards,
+      platformFee,
+      rewardAmount,
+      maxResponses
+    });
+
+    if (balance < totalRequired) {
+      return res.status(400).json({ 
+        error: `Insufficient balance. Required: ${totalRequired} MOVE, Available: ${balance} MOVE`,
+        details: {
+          required: totalRequired,
+          available: balance,
+          shortfall: totalRequired - balance
+        }
+      });
+    }
+
+    console.log('🔧 About to build payload with:', {
+      title: surveyData.title,
+      description: surveyData.description,
+      rewardAmount: surveyData.rewardAmount,
+      maxResponses: surveyData.maxResponses
+    });
+
+    let payload;
+    try {
+      payload = transactionService.buildCreateSurveyPayload(
+        surveyData.title,
+        surveyData.description,
+        surveyData.rewardAmount,
+        surveyData.maxResponses
+      );
+    } catch (payloadError) {
+      console.error('❌ Failed to build payload:', payloadError);
+      return res.status(400).json({ 
+        error: `Failed to build transaction payload: ${payloadError.message}` 
+      });
+    }
+
+    console.log('🔧 Built payload:', JSON.stringify(payload, null, 2));
+
+    if (!payload) {
+      throw new Error('Failed to build transaction payload');
+    }
+
+    console.log('🚀 About to call signAndSubmitTransaction with payload:', !!payload);
+    console.log('🚀 Payload type:', typeof payload);
+    console.log('🚀 Payload keys:', Object.keys(payload || {}));
 
     const result = await transactionService.signAndSubmitTransaction(
       walletId, publicKey, address, payload
@@ -252,6 +374,37 @@ app.post('/api/transactions/create-survey', async (req, res) => {
 
   } catch (error) {
     console.error('Create survey error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      details: error.stack 
+    });
+  }
+});
+
+app.post('/api/transactions/close-survey', async (req, res) => {
+  try {
+    const { walletId, publicKey, address, surveyId } = req.body;
+    
+    if (!walletId || !publicKey || !address || !surveyId) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: walletId, publicKey, address, surveyId' 
+      });
+    }
+
+    const payload = transactionService.buildCloseSurveyPayload(surveyId);
+
+    const result = await transactionService.signAndSubmitTransaction(
+      walletId, publicKey, address, payload
+    );
+
+    res.json({ 
+      success: true, 
+      transactionHash: result.hash,
+      result 
+    });
+
+  } catch (error) {
+    console.error('Close survey error:', error);
     res.status(500).json({ 
       error: error.message,
       details: error.stack 

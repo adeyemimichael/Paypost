@@ -22,8 +22,11 @@ export const useWalletStore = create(
       initializeWallet: async (userId) => {
         const { wallet, isInitialized } = get();
         
-        // Don't reinitialize if already done for this user
-        if (isInitialized && wallet?.userId === userId) {
+        // Check if we have a stored wallet address for this user
+        const storedWalletAddress = localStorage.getItem(`paypost_wallet_${userId}`);
+        
+        // Don't reinitialize if already done for this user and wallet address matches
+        if (isInitialized && wallet?.userId === userId && storedWalletAddress === wallet?.address) {
           console.log('Wallet already initialized for user:', userId);
           // Still fetch balance in case it changed
           get().fetchBalance();
@@ -42,6 +45,10 @@ export const useWalletStore = create(
             
             // Add userId to wallet object for tracking
             const walletWithUserId = { ...completeWallet, userId };
+            
+            // Store wallet address for persistence
+            localStorage.setItem(`paypost_wallet_${userId}`, completeWallet.address);
+            
             set({ 
               wallet: walletWithUserId, 
               isInitialized: true,
@@ -51,7 +58,7 @@ export const useWalletStore = create(
             // Fetch initial balance
             get().fetchBalance();
             
-            console.log('Wallet initialized with publicKey:', walletWithUserId.address);
+            console.log('Wallet initialized with address:', walletWithUserId.address);
             return walletWithUserId;
           }
         } catch (error) {

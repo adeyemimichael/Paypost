@@ -12,7 +12,7 @@ compiled_package_info:
     std: "0000000000000000000000000000000000000000000000000000000000000001"
     vm: "0000000000000000000000000000000000000000000000000000000000000000"
     vm_reserved: "0000000000000000000000000000000000000000000000000000000000000000"
-  source_digest: 30DBF92110248D1FA7D010B3554286B33ECBB7A91C9D322E93B32925E6415108
+  source_digest: 9223D7D9C6183C29E2B996F5EC3307904A866D41B5611D1F13E21220A6AD5E8E
   build_flags:
     dev_mode: false
     test_mode: false
@@ -26,7 +26,7 @@ compiled_package_info:
     additional_named_addresses:
       PayPost: a74c3b75410a0681f854cfe2b869a3cd6b959d7dbe551aef4781c6a3ff3aa8dd
     fetch_deps_only: false
-    skip_fetch_latest_git_deps: false
+    skip_fetch_latest_git_deps: true
     compiler_config:
       bytecode_version: 7
       known_attributes:

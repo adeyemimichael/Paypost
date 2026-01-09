@@ -1,7 +1,7 @@
 // Frontend API client for Movement blockchain operations
 // All transaction signing happens on backend via Privy
 
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 export const movementService = {
   /**
@@ -61,6 +61,13 @@ export const movementService = {
       console.error('Transaction submission failed:', error);
       throw error;
     }
+  },
+
+  /**
+   * Close a survey and refund remaining funds
+   */
+  async closeSurvey(surveyId, userWallet) {
+    return await this.submitTransaction('close-survey', { surveyId }, userWallet);
   },
 
   /**

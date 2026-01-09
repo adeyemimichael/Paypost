@@ -30,6 +30,22 @@ const MODULE_NAME = "ContentPlatform";
 export class TransactionService {
   async signAndSubmitTransaction(walletId, publicKey, address, transactionPayload) {
     try {
+      console.log('🔧 signAndSubmitTransaction called with:', {
+        walletId: !!walletId,
+        publicKey: !!publicKey,
+        address: !!address,
+        transactionPayload: !!transactionPayload,
+        payloadType: typeof transactionPayload,
+        payloadKeys: transactionPayload ? Object.keys(transactionPayload) : 'undefined'
+      });
+
+      if (!transactionPayload) {
+        throw new Error('transactionPayload is undefined');
+      }
+
+      if (!transactionPayload.function) {
+        throw new Error('transactionPayload.function is undefined');
+      }
       // Clean and validate inputs
       const cleanAddress = address.startsWith('0x') ? address : `0x${address}`;
       let cleanPublicKey = publicKey;
@@ -65,15 +81,24 @@ export class TransactionService {
 
       console.log('✅ Clean address:', cleanAddress);
       console.log('✅ Clean publicKey:', cleanPublicKey, 'length:', cleanPublicKey.length);
+      console.log('🔧 Transaction payload:', JSON.stringify(transactionPayload, null, 2));
 
       // 1. Build transaction
+      console.log('🔧 About to build transaction...');
       const rawTxn = await aptos.transaction.build.simple({
         sender: cleanAddress,
         data: {
-          function: `${MODULE_ADDRESS}::ContentPlatform::create_and_fund_survey`,
+          function: transactionPayload.function,
           functionArguments: transactionPayload.functionArguments
         }
       });
+
+      console.log('🔧 Transaction built successfully');
+      console.log('📦 Built transaction:', JSON.stringify({
+        sender: rawTxn.sender,
+        function: rawTxn.payload?.function || 'undefined',
+        arguments: rawTxn.payload?.arguments || 'undefined'
+      }, null, 2));
 
       // 2. Generate signing message
       const message = generateSigningMessageForTransaction(rawTxn);
@@ -175,6 +200,20 @@ export class TransactionService {
       durationSeconds
     });
 
+    // Validate inputs
+    if (titleBytes.length === 0) {
+      throw new Error('Title cannot be empty');
+    }
+    if (descBytes.length === 0) {
+      throw new Error('Description cannot be empty');
+    }
+    if (rewardOctas <= 0) {
+      throw new Error('Reward amount must be positive');
+    }
+    if (maxResponses <= 0) {
+      throw new Error('Max responses must be positive');
+    }
+
     return {
       function: `${MODULE_ADDRESS}::ContentPlatform::create_and_fund_survey`,
       functionArguments: [
@@ -184,6 +223,13 @@ export class TransactionService {
         maxResponses,
         durationSeconds
       ]
+    };
+  }
+
+  buildCloseSurveyPayload(surveyId) {
+    return {
+      function: `${MODULE_ADDRESS}::${MODULE_NAME}::close_survey`,
+      functionArguments: [surveyId]
     };
   }
 
