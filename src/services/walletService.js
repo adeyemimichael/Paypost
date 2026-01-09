@@ -5,6 +5,7 @@ const API_BASE_URL = 'http://localhost:3001/api';
 class WalletService {
   constructor() {
     this.walletCache = new Map(); // Cache wallets by userId
+    this.creationLocks = new Map(); // Prevent concurrent wallet creation
   }
 
   // Create Aptos wallet for user via backend
@@ -19,9 +20,17 @@ class WalletService {
       return response.data;
     } catch (error) {
       if (error.response?.status === 409) {
-        // User already has Aptos wallet - get it
-        const existingWallet = await this.getUserAptosWallet(userId);
-        return { wallet: existingWallet };
+        // User already has Aptos wallet - return the existing one
+        const existingWallet = error.response.data.wallet;
+        if (existingWallet) {
+          console.log('✅ Using existing wallet from 409 response:', existingWallet.address);
+          this.walletCache.set(userId, existingWallet);
+          return { wallet: existingWallet };
+        } else {
+          // Fallback: get it via getUserAptosWallet
+          const existingWallet = await this.getUserAptosWallet(userId);
+          return { wallet: existingWallet };
+        }
       }
       
       throw new Error(error.response?.data?.error || 'Failed to create Aptos wallet');
@@ -31,9 +40,12 @@ class WalletService {
   // Get user's wallets from backend
   async getUserWallets(userId) {
     try {
+      console.log('🔍 Getting wallets from backend for user:', userId);
       const response = await axios.get(`${API_BASE_URL}/wallets/user/${userId}`);
+      console.log('🔍 Backend response:', response.data);
       return response.data.wallets;
     } catch (error) {
+      console.error('❌ Failed to get user wallets:', error);
       throw new Error(error.response?.data?.error || 'Failed to get user wallets');
     }
   }
@@ -41,33 +53,34 @@ class WalletService {
   // Get user's specific Aptos wallet
   async getUserAptosWallet(userId) {
     try {
+      console.log('🔍 Getting Aptos wallet for user:', userId);
+      
       // Check cache first
       if (this.walletCache.has(userId)) {
         const cachedWallet = this.walletCache.get(userId);
-        console.log('Using cached Aptos wallet:', cachedWallet);
+        console.log('✅ Using cached Aptos wallet:', cachedWallet.address);
         return cachedWallet;
       }
 
       // Get from backend
+      console.log('🔍 Fetching wallets from backend...');
       const wallets = await this.getUserWallets(userId);
+      console.log('🔍 Backend returned wallets:', wallets.length);
+      
       const aptosWallet = wallets.find(wallet => wallet.chainType === 'aptos');
       
       if (aptosWallet) {
-        // If wallet is missing publicKey, try to get it from the full wallet list
-        if (!aptosWallet.publicKey) {
-          console.log('Wallet missing publicKey, attempting to fetch from backend...');
-          // For now, we'll handle this in the movement service
-        }
+        console.log('✅ Found Aptos wallet in backend response:', aptosWallet.address);
         
         // Cache it
         this.walletCache.set(userId, aptosWallet);
-        console.log('Found and cached Aptos wallet:', aptosWallet);
         return aptosWallet;
       }
       
+      console.log('⚠️ No Aptos wallet found in backend response');
       return null;
     } catch (error) {
-      console.error('Failed to get user Aptos wallet:', error);
+      console.error('❌ Failed to get user Aptos wallet:', error);
       return null;
     }
   }

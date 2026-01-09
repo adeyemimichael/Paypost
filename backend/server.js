@@ -27,6 +27,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Simple in-memory user-wallet mapping (in production, use a database)
+const userWalletMapping = new Map();
+
 // Wallet management endpoints
 app.post('/api/wallets/create-aptos', async (req, res) => {
   try {
@@ -38,12 +41,43 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
 
     console.log('Creating Aptos wallet for user:', userId);
 
-    // Create Aptos wallet using Privy API
+    // Check if user already has a wallet in our mapping
+    if (userWalletMapping.has(userId)) {
+      const existingWalletId = userWalletMapping.get(userId);
+      console.log('✅ User already has wallet in mapping:', existingWalletId);
+      
+      try {
+        const existingWallet = await privy.wallets().get(existingWalletId);
+        if (existingWallet && existingWallet.chain_type === 'aptos') {
+          console.log('✅ Returning existing wallet:', existingWallet.address);
+          return res.status(409).json({ 
+            error: 'User already has an Aptos wallet',
+            code: 'WALLET_EXISTS',
+            wallet: {
+              id: existingWallet.id,
+              address: existingWallet.address,
+              chainType: existingWallet.chain_type,
+              publicKey: existingWallet.public_key,
+              createdAt: existingWallet.created_at
+            }
+          });
+        }
+      } catch (walletError) {
+        console.log('Existing wallet not found, removing from mapping');
+        userWalletMapping.delete(userId);
+      }
+    }
+
+    // Create new Aptos wallet
     const wallet = await privy.wallets().create({
       chain_type: 'aptos'
     });
 
     console.log('Aptos wallet created:', wallet);
+
+    // Store the mapping
+    userWalletMapping.set(userId, wallet.id);
+    console.log('✅ Wallet mapped to user:', userId, '->', wallet.id);
 
     res.json({
       success: true,
@@ -51,21 +85,13 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
         id: wallet.id,
         address: wallet.address,
         chainType: wallet.chain_type,
-        publicKey: wallet.public_key,  // Add the missing publicKey field
+        publicKey: wallet.public_key,
         createdAt: wallet.created_at
       }
     });
 
   } catch (error) {
     console.error('Failed to create Aptos wallet:', error);
-    
-    // Handle specific Privy errors
-    if (error.message.includes('already exists')) {
-      return res.status(409).json({ 
-        error: 'User already has an Aptos wallet',
-        code: 'WALLET_EXISTS'
-      });
-    }
     
     res.status(500).json({ 
       error: 'Failed to create Aptos wallet',
@@ -80,37 +106,67 @@ app.get('/api/wallets/user/:userId', async (req, res) => {
     const { userId } = req.params;
     console.log('Getting wallets for user:', userId);
     
-    // First get the user to verify they exist
-    const user = await privy.users().getById(userId);
-    console.log('User found:', user.id);
+    // Check our mapping first
+    if (userWalletMapping.has(userId)) {
+      const walletId = userWalletMapping.get(userId);
+      console.log('Found wallet in mapping:', walletId);
+      
+      try {
+        const wallet = await privy.wallets().get(walletId);
+        if (wallet) {
+          console.log('✅ Retrieved wallet from mapping:', wallet.address);
+          return res.json({
+            success: true,
+            wallets: [{
+              id: wallet.id,
+              address: wallet.address,
+              chainType: wallet.chain_type,
+              walletClientType: 'privy',
+              publicKey: wallet.public_key,
+              createdAt: wallet.created_at
+            }]
+          });
+        }
+      } catch (walletError) {
+        console.log('Wallet from mapping not found, removing mapping');
+        userWalletMapping.delete(userId);
+      }
+    }
     
-    // Get all wallets and filter by owner_id
-    const allWallets = await privy.wallets().list();
-    console.log('Total wallets in system:', allWallets.length);
-    
-    // Filter wallets that belong to this user
-    const userWallets = allWallets.filter(wallet => {
-      // Check if the wallet's owner_id corresponds to this user
-      return wallet.owner_id && (
-        wallet.owner_id === user.id || 
-        wallet.owner_id.includes(userId.split(':').pop()) // Handle DID format
-      );
-    });
-    
-    console.log('Found wallets for user:', userWallets.length);
-    console.log('User wallets:', userWallets.map(w => ({ id: w.id, address: w.address, chain: w.chain_type })));
+    // Fallback to original method
+    try {
+      const user = await privy.users().getById(userId);
+      console.log('User found:', user.id);
+      
+      // Get all wallets and filter by owner_id
+      const allWallets = await privy.wallets().list();
+      const userWallets = allWallets.filter(wallet => {
+        return wallet.owner_id && (
+          wallet.owner_id === user.id || 
+          wallet.owner_id.includes(userId.split(':').pop())
+        );
+      });
+      
+      console.log('Found wallets for user:', userWallets.length);
 
-    res.json({
-      success: true,
-      wallets: userWallets.map(wallet => ({
-        id: wallet.id,
-        address: wallet.address,
-        chainType: wallet.chain_type,
-        walletClientType: 'privy',
-        publicKey: wallet.public_key,
-        createdAt: wallet.created_at
-      }))
-    });
+      res.json({
+        success: true,
+        wallets: userWallets.map(wallet => ({
+          id: wallet.id,
+          address: wallet.address,
+          chainType: wallet.chain_type,
+          walletClientType: 'privy',
+          publicKey: wallet.public_key,
+          createdAt: wallet.created_at
+        }))
+      });
+    } catch (userError) {
+      console.error('Failed to get user or wallets:', userError);
+      res.json({
+        success: true,
+        wallets: []
+      });
+    }
 
   } catch (error) {
     console.error('Failed to get user wallets:', error);
