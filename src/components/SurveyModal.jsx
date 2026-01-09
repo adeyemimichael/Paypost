@@ -143,6 +143,15 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
       notify.success(`Survey completed! You earned ${formatPrice(post.reward || post.rewardAmount)} MOVE`);
       setIsCompleted(true);
       
+      // Store transaction hash for later reference
+      if (result.transactionHash) {
+        localStorage.setItem(`survey_completion_${post.id}_${wallet.address}`, JSON.stringify({
+          transactionHash: result.transactionHash,
+          completedAt: new Date().toISOString(),
+          reward: post.reward || post.rewardAmount
+        }));
+      }
+      
     } catch (error) {
       console.error('Failed to complete survey:', error);
       notify.error(`Failed to complete survey: ${error.message}`);

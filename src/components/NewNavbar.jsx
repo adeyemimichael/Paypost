@@ -274,38 +274,6 @@ const Navbar = () => {
                     <div className="text-xs text-gray-500">
                       Balance: {isLoading ? '...' : `${(balance || 0).toFixed(2)}`} MOVE
                     </div>
-                    
-                    {/* Role Switcher */}
-                    <div className="mt-2 flex gap-1">
-                      <button
-                        onClick={() => {
-                          setUserRole('participant');
-                          setShowUserMenu(false);
-                          notify.success('Switched to Participant mode');
-                        }}
-                        className={`px-2 py-1 text-xs rounded ${
-                          userRole === 'participant' 
-                            ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        Participant
-                      </button>
-                      <button
-                        onClick={() => {
-                          setUserRole('creator');
-                          setShowUserMenu(false);
-                          notify.success('Switched to Creator mode');
-                        }}
-                        className={`px-2 py-1 text-xs rounded ${
-                          userRole === 'creator' 
-                            ? 'bg-purple-100 text-purple-700 border border-purple-200' 
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        Creator
-                      </button>
-                    </div>
                       </div>
 
                       {/* Disconnect */}

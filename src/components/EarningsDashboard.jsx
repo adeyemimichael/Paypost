@@ -19,7 +19,8 @@ const EarningsDashboard = () => {
     totalEarnings: 0,
     totalCompleted: 0,
     avgEarnings: 0,
-    availableSurveys: 0
+    availableSurveys: 0,
+    completedSurveys: []
   });
   const [loading, setLoading] = useState(true);
 
@@ -33,12 +34,23 @@ const EarningsDashboard = () => {
         // Get user activity from blockchain
         const activity = await movementService.getUserActivity(wallet.address);
         
-        // Count completed surveys
+        // Count completed surveys and get their details
         let completedCount = 0;
+        const completedSurveyDetails = [];
+        
         for (const post of posts) {
           if (post.type === 'survey') {
             const hasCompleted = await movementService.hasCompletedSurvey(wallet.address, post.id);
-            if (hasCompleted) completedCount++;
+            if (hasCompleted) {
+              completedCount++;
+              completedSurveyDetails.push({
+                id: post.id,
+                title: post.title,
+                reward: post.reward || post.rewardAmount,
+                completedAt: new Date(), // You might want to get this from blockchain
+                // transactionHash would need to be retrieved from blockchain or database
+              });
+            }
           }
         }
         
@@ -53,7 +65,8 @@ const EarningsDashboard = () => {
           totalEarnings: activity.totalEarnings,
           totalCompleted: completedCount,
           avgEarnings,
-          availableSurveys
+          availableSurveys,
+          completedSurveys: completedSurveyDetails
         });
         
       } catch (error) {
@@ -148,6 +161,36 @@ const EarningsDashboard = () => {
           </div>
         </div>
       </Card>
+      
+      {/* Completed Surveys Section */}
+      {participantStats.completedSurveys.length > 0 && (
+        <Card className="mt-6">
+          <div className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Completed Surveys</h3>
+            <div className="space-y-3">
+              {participantStats.completedSurveys.slice(0, 5).map((survey) => (
+                <div key={survey.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{survey.title}</p>
+                    <p className="text-sm text-gray-600">Earned: {formatPrice(survey.reward)}</p>
+                  </div>
+                  {survey.transactionHash && (
+                    <button
+                      onClick={() => window.open(`https://explorer.movementnetwork.xyz/txn/${survey.transactionHash}`, '_blank')}
+                      className="flex items-center text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      View Transaction
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
     </motion.div>
   );
 };

@@ -513,6 +513,24 @@ class SupabaseService {
       }
     ];
   }
+  async recordSurveyCompletion(surveyId, userId, transactionHash) {
+    try {
+      const { data, error } = await supabase
+        .from('survey_responses')
+        .insert({
+          survey_id: surveyId,
+          user_id: userId,
+          blockchain_tx_hash: transactionHash,
+          completed_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Failed to record survey completion:', error);
+      throw error;
+    }
+  }
 }
 
 export const supabaseService = new SupabaseService();

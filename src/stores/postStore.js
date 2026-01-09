@@ -132,26 +132,56 @@ export const usePostStore = create((set, get) => ({
       console.log('📊 Loading surveys from Supabase...');
       const surveys = await supabaseService.getSurveys(filters);
       
-      // Transform surveys to match expected format
-      const transformedSurveys = surveys.map(survey => ({
-        id: survey.id,
-        title: survey.title,
-        preview: survey.description?.substring(0, 100) + '...' || 'No description',
-        content: survey.description || 'No description available',
-        author: survey.creator?.display_name || 'Unknown Creator',
-        reward: parseFloat(survey.reward_amount) || 0,
-        maxResponses: survey.max_responses || 100,
-        responses: survey.current_responses || 0,
-        isActive: survey.is_active !== false,
-        timestamp: new Date(survey.created_at).getTime(),
-        image: survey.image_url || 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800',
-        questions: survey.questions || [],
-        type: 'survey',
-        source: 'supabase',
-        creatorId: survey.creator_id,
-        category: survey.category || 'general',
-        estimatedTime: survey.estimated_time || 5
-      }));
+      // Transform surveys to match expected format with proper questions
+      const transformedSurveys = surveys.map(survey => {
+        // Ensure questions are properly formatted
+        let questions = [];
+        if (survey.questions && Array.isArray(survey.questions)) {
+          questions = survey.questions.map(q => ({
+            id: q.id,
+            type: q.question_type || 'multiple-choice',
+            question: q.question_text,
+            options: q.options || [],
+            required: q.is_required !== false,
+            max: q.max_rating || 5
+          }));
+        }
+        
+        // Add default question if none exist
+        if (questions.length === 0) {
+          questions = [
+            {
+              id: 1,
+              type: 'multiple-choice',
+              question: 'How would you rate this survey topic?',
+              options: ['Excellent', 'Good', 'Fair', 'Poor'],
+              required: true
+            }
+          ];
+        }
+
+        return {
+          id: survey.id,
+          title: survey.title,
+          preview: survey.description?.substring(0, 100) + '...' || 'No description',
+          content: survey.description || 'No description available',
+          author: survey.creator?.display_name || 'Unknown Creator',
+          reward: parseFloat(survey.reward_amount) || 0,
+          rewardAmount: parseFloat(survey.reward_amount) || 0, // Add both for compatibility
+          maxResponses: survey.max_responses || 100,
+          responses: survey.current_responses || 0,
+          isActive: survey.is_active !== false,
+          timestamp: new Date(survey.created_at).getTime(),
+          image: survey.image_url || 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800',
+          questions: questions,
+          type: 'survey',
+          source: 'supabase',
+          creatorId: survey.creator_id,
+          creator_wallet_address: survey.creator?.wallet_address,
+          category: survey.category || 'general',
+          estimatedTime: survey.estimated_time || 5
+        };
+      });
       
       set({ posts: transformedSurveys });
       console.log(`✅ Loaded ${transformedSurveys.length} surveys from Supabase`);
@@ -373,18 +403,31 @@ export const usePostStore = create((set, get) => ({
       };
     }
 
-    // Filter surveys created by this wallet address
+    // Filter surveys created by this wallet address (check multiple possible fields)
     const creatorSurveys = posts.filter(post => {
-      // Check both creator object and direct creator_wallet_address field
+      if (post.type !== 'survey') return false;
+      
+      // Check various possible creator identification fields
       return post.creator?.wallet_address === walletAddress || 
-             post.creator_wallet_address === walletAddress;
+             post.creator_wallet_address === walletAddress ||
+             post.creatorWalletAddress === walletAddress ||
+             (post.creator && typeof post.creator === 'string' && post.creator === walletAddress);
     });
 
+    console.log('Creator surveys found:', creatorSurveys.length, 'for wallet:', walletAddress);
+    console.log('Sample survey creator fields:', creatorSurveys[0] ? {
+      creator: creatorSurveys[0].creator,
+      creator_wallet_address: creatorSurveys[0].creator_wallet_address,
+      creatorWalletAddress: creatorSurveys[0].creatorWalletAddress
+    } : 'No surveys found');
+
     const totalResponses = creatorSurveys.reduce((sum, survey) => 
-      sum + (survey.current_responses || 0), 0
+      sum + (survey.current_responses || survey.responses || 0), 0
     );
 
-    const activeSurveys = creatorSurveys.filter(survey => survey.is_active).length;
+    const activeSurveys = creatorSurveys.filter(survey => 
+      survey.is_active !== false && survey.isActive !== false
+    ).length;
 
     // Get real escrow balance from blockchain
     let escrowBalance = 0;
@@ -394,9 +437,9 @@ export const usePostStore = create((set, get) => ({
       console.error('Failed to get blockchain escrow:', error);
       // Fallback to calculated escrow from database
       escrowBalance = creatorSurveys.reduce((sum, survey) => {
-        if (survey.is_active) {
-          const remainingResponses = (survey.max_responses || 0) - (survey.current_responses || 0);
-          const rewardPerResponse = survey.reward_amount || 0;
+        if (survey.is_active !== false && survey.isActive !== false) {
+          const remainingResponses = (survey.max_responses || survey.maxResponses || 0) - (survey.current_responses || survey.responses || 0);
+          const rewardPerResponse = survey.reward_amount || survey.reward || 0;
           return sum + (remainingResponses * rewardPerResponse);
         }
         return sum;
@@ -410,10 +453,30 @@ export const usePostStore = create((set, get) => ({
       escrowBalance
     };
 
+    console.log('Creator stats calculated:', stats);
     return stats;
   },
 
-  // Check if user has completed a specific survey
+  // Get surveys created by a specific wallet address
+  getCreatorSurveys: async (walletAddress) => {
+    const { posts } = get();
+    
+    if (!walletAddress) return [];
+
+    // Filter surveys created by this wallet address
+    const creatorSurveys = posts.filter(post => {
+      if (post.type !== 'survey') return false;
+      
+      // Check various possible creator identification fields
+      return post.creator?.wallet_address === walletAddress || 
+             post.creator_wallet_address === walletAddress ||
+             post.creatorWalletAddress === walletAddress ||
+             (post.creator && typeof post.creator === 'string' && post.creator === walletAddress);
+    });
+
+    console.log('getCreatorSurveys found:', creatorSurveys.length, 'surveys for wallet:', walletAddress);
+    return creatorSurveys;
+  },
   hasUserCompletedSurvey: async (userAddress, surveyId) => {
     try {
       // First check blockchain
@@ -435,12 +498,32 @@ export const usePostStore = create((set, get) => ({
 
   completeSurvey: async (surveyId, wallet) => {
     try {
+      console.log('Completing survey on blockchain...', { surveyId, wallet: wallet.address });
+      
+      // Complete survey on blockchain (this pays the participant)
       const result = await movementService.completeSurvey(surveyId, wallet);
+      console.log('✅ Survey completed on blockchain:', result);
+      
+      // Store completion in Supabase with transaction hash
+      try {
+        const user = await supabaseService.getOrCreateUser(wallet.address, null, 'participant');
+        if (user) {
+          await supabaseService.recordSurveyCompletion(surveyId, user.id, result.transactionHash);
+        }
+      } catch (dbError) {
+        console.error('Failed to record completion in database:', dbError);
+        // Don't fail the whole operation if database fails
+      }
+      
       // Refresh data after successful transaction
       if (wallet?.address) {
         setTimeout(() => get().refreshAfterAction(wallet.address), 2000);
       }
-      return result;
+      
+      return {
+        ...result,
+        transactionHash: result.hash || result.transactionHash
+      };
     } catch (error) {
       console.error('Failed to complete survey:', error);
       throw error;

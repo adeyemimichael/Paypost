@@ -83,45 +83,57 @@ class WalletService {
     }
   }
 
-  // Ensure user has exactly one Aptos wallet
+  // Ensure user has exactly one Aptos wallet (persistent across sessions)
   async ensureAptosWallet(userId) {
     try {
-      console.log('Ensuring single Aptos wallet for user:', userId);
+      console.log('Ensuring persistent Aptos wallet for user:', userId);
       
-      // Check localStorage first to see if we already have a wallet for this user
+      // ALWAYS check backend first for existing wallet
+      let aptosWallet = await this.getUserAptosWallet(userId);
+      
+      if (aptosWallet) {
+        console.log('✅ Found existing Aptos wallet:', aptosWallet.address);
+        // Store in localStorage for faster future access
+        const storageKey = `paypost_wallet_${userId}`;
+        localStorage.setItem(storageKey, JSON.stringify(aptosWallet));
+        return aptosWallet;
+      }
+      
+      // Check localStorage as secondary option (but verify with backend)
       const storageKey = `paypost_wallet_${userId}`;
       const storedWallet = localStorage.getItem(storageKey);
       
       if (storedWallet) {
         try {
           const wallet = JSON.parse(storedWallet);
-          console.log('Found stored wallet for user:', wallet.address);
-          this.walletCache.set(userId, wallet);
-          return wallet;
+          console.log('Found stored wallet, verifying with backend:', wallet.address);
+          
+          // Verify this wallet still exists in backend
+          const backendWallets = await this.getUserWallets(userId);
+          const matchingWallet = backendWallets.find(w => w.address === wallet.address);
+          
+          if (matchingWallet) {
+            console.log('✅ Verified stored wallet exists in backend');
+            this.walletCache.set(userId, matchingWallet);
+            return matchingWallet;
+          } else {
+            console.log('⚠️ Stored wallet not found in backend, removing from storage');
+            localStorage.removeItem(storageKey);
+          }
         } catch (error) {
-          console.error('Failed to parse stored wallet, will create new one');
+          console.error('Failed to parse stored wallet, removing:', error);
           localStorage.removeItem(storageKey);
         }
       }
       
-      // Try to get existing wallet from backend
-      let aptosWallet = await this.getUserAptosWallet(userId);
-      
-      if (aptosWallet) {
-        console.log('User already has Aptos wallet:', aptosWallet.address);
-        // Store in localStorage for future use
-        localStorage.setItem(storageKey, JSON.stringify(aptosWallet));
-        return aptosWallet;
-      }
-      
-      // Create new wallet only if none exists
+      // Only create new wallet if absolutely none exists
       console.log('Creating new Aptos wallet for user:', userId);
       const result = await this.createAptosWallet(userId);
       
       // Store the new wallet in localStorage
       localStorage.setItem(storageKey, JSON.stringify(result.wallet));
       
-      console.log('New Aptos wallet created:', result.wallet.address);
+      console.log('✅ New Aptos wallet created:', result.wallet.address);
       return result.wallet;
       
     } catch (error) {
