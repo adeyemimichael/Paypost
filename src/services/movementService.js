@@ -9,19 +9,6 @@ export const movementService = {
    */
   async submitTransaction(endpoint, payload, userWallet) {
     try {
-      console.log('🔍 DEBUGGING: submitTransaction called with:', {
-        endpoint,
-        payload,
-        userWallet: {
-          id: userWallet?.id,
-          address: userWallet?.address,
-          publicKey: userWallet?.publicKey,
-          public_key: userWallet?.public_key,
-          chainType: userWallet?.chainType,
-          walletClientType: userWallet?.walletClientType
-        }
-      });
-
       // Handle both camelCase and snake_case field names from different sources
       const walletData = {
         walletId: userWallet.id,
@@ -30,31 +17,14 @@ export const movementService = {
         ...payload
       };
 
-      console.log('🔍 DEBUGGING: walletData after initial setup:', {
-        walletId: walletData.walletId,
-        publicKey: walletData.publicKey,
-        address: walletData.address,
-        publicKeyType: typeof walletData.publicKey,
-        publicKeyLength: walletData.publicKey?.length
-      });
-
       // If publicKey is still missing, try to get it from the wallet service
       if (!walletData.publicKey && userWallet.id) {
-        console.log('🔍 DEBUGGING: PublicKey missing, attempting to fetch from backend...');
         try {
           const { walletService } = await import('../services/walletService.js');
           const completeWallet = await walletService.getCompleteWalletInfo(userWallet.id);
-          console.log('🔍 DEBUGGING: Complete wallet from backend:', {
-            id: completeWallet?.id,
-            address: completeWallet?.address,
-            publicKey: completeWallet?.publicKey,
-            publicKeyType: typeof completeWallet?.publicKey,
-            publicKeyLength: completeWallet?.publicKey?.length
-          });
           walletData.publicKey = completeWallet.publicKey;
-          console.log('🔍 DEBUGGING: Successfully fetched publicKey, length:', walletData.publicKey?.length);
         } catch (error) {
-          console.error('🔍 DEBUGGING: Failed to fetch publicKey:', error);
+          console.error('Failed to fetch publicKey:', error);
         }
       }
 
@@ -63,28 +33,15 @@ export const movementService = {
         console.error('Missing wallet fields:', {
           walletId: !!walletData.walletId,
           publicKey: !!walletData.publicKey,
-          address: !!walletData.address,
-          wallet: userWallet
+          address: !!walletData.address
         });
-        console.error('Full wallet object:', JSON.stringify(userWallet, null, 2));
         
-        // If publicKey is still missing, provide helpful error
         if (!walletData.publicKey) {
           throw new Error('Unable to retrieve wallet publicKey. Please try refreshing the page.');
         }
         
         throw new Error('Missing required fields: walletId, publicKey, address, surveyData');
       }
-
-      console.log('🔍 DEBUGGING: Final walletData being sent to backend:', {
-        walletId: walletData.walletId,
-        publicKey: walletData.publicKey,
-        address: walletData.address,
-        publicKeyType: typeof walletData.publicKey,
-        publicKeyLength: walletData.publicKey?.length,
-        hasPublicKey: !!walletData.publicKey,
-        hasSurveyData: !!walletData.surveyData
-      });
 
       const response = await fetch(`${API_BASE_URL}/transactions/${endpoint}`, {
         method: 'POST',

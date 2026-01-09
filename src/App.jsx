@@ -16,7 +16,6 @@ import CreatorDashboard from './components/CreatorDashboard';
 import StatusPage from './pages/StatusPage';
 import TestPage from './pages/TestPage';
 import WalletStatusPage from './pages/WalletStatusPage';
-import WalletDebugPage from './pages/WalletDebugPage';
 import AboutPage from './pages/AboutPage';
 import HowItWorksPage from './pages/HowItWorksPage';
 import FAQPage from './pages/FAQPage';
@@ -110,7 +109,6 @@ const AppContent = () => {
             <Route path="/status" element={<StatusPage />} />
             <Route path="/test" element={<TestPage />} />
             <Route path="/wallet-status" element={<WalletStatusPage />} />
-            <Route path="/wallet-debug" element={<WalletDebugPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/how-it-works" element={<HowItWorksPage />} />
             <Route path="/faq" element={<FAQPage />} />
