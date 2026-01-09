@@ -31,41 +31,75 @@ export class TransactionService {
   async signAndSubmitTransaction(walletId, publicKey, address, transactionPayload) {
     try {
       console.log('🔄 Building transaction for:', address);
+      console.log('📋 Transaction payload:', JSON.stringify(transactionPayload, null, 2));
+      console.log('🔑 PublicKey:', publicKey);
+      console.log('🆔 WalletId:', walletId);
+
+      // Clean and validate inputs
+      const cleanAddress = address.startsWith('0x') ? address : `0x${address}`;
+      let cleanPublicKey = publicKey;
       
-      // 1. Build transaction
+      // Handle publicKey formatting
+      if (typeof publicKey === 'string') {
+        if (publicKey.startsWith('0x')) {
+          cleanPublicKey = publicKey.slice(2);
+        } else if (publicKey.startsWith('00') && publicKey.length === 66) {
+          cleanPublicKey = publicKey.slice(2);
+        }
+        
+        if (cleanPublicKey.length !== 64) {
+          throw new Error(`Invalid publicKey length: ${cleanPublicKey.length}. Expected 64 hex characters.`);
+        }
+      }
+
+      console.log('✅ Clean address:', cleanAddress);
+      console.log('✅ Clean publicKey:', cleanPublicKey, 'length:', cleanPublicKey.length);
+
+      // 1. Build transaction with explicit typing
       const rawTxn = await aptos.transaction.build.simple({
-        sender: AccountAddress.from(address),
-        data: transactionPayload
+        sender: cleanAddress,
+        data: {
+          function: `${MODULE_ADDRESS}::ContentPlatform::create_and_fund_survey`,
+          functionArguments: transactionPayload.functionArguments
+        }
       });
 
-      console.log('📝 Transaction built, generating signing message...');
+      console.log('📝 Transaction built successfully');
 
       // 2. Generate signing message
       const message = generateSigningMessageForTransaction(rawTxn);
-      
-      console.log('✍️ Signing with Privy...');
+      console.log('📝 Signing message generated');
 
       // 3. Sign with Privy
+      console.log('✍️ Signing with Privy...');
       const signatureResponse = await privy.wallets().rawSign(walletId, {
         params: { hash: toHex(message) }
       });
       
-      const signature = signatureResponse;
-      console.log('✅ Signature received, submitting transaction...');
+      let cleanSignature = signatureResponse;
+      if (typeof signatureResponse === 'string' && signatureResponse.startsWith('0x')) {
+        cleanSignature = signatureResponse.slice(2);
+      }
+      
+      console.log('✅ Signature received, length:', cleanSignature.length);
 
-      // 4. Submit transaction
+      // 4. Create authenticator
       const senderAuthenticator = new AccountAuthenticatorEd25519(
-        new Ed25519PublicKey(publicKey),
-        new Ed25519Signature(signature.slice(2))
+        new Ed25519PublicKey(cleanPublicKey),
+        new Ed25519Signature(cleanSignature)
       );
 
+      console.log('✅ Authenticator created');
+
+      // 5. Submit transaction
       const pending = await aptos.transaction.submit.simple({
         transaction: rawTxn,
         senderAuthenticator
       });
 
-      console.log('⏳ Waiting for transaction confirmation...');
+      console.log('⏳ Transaction submitted:', pending.hash);
 
+      // 6. Wait for confirmation
       const executed = await aptos.waitForTransaction({
         transactionHash: pending.hash
       });
@@ -75,6 +109,11 @@ export class TransactionService {
 
     } catch (error) {
       console.error('❌ Transaction failed:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        invalidReason: error.invalidReason
+      });
       throw new Error(`Transaction failed: ${error.message}`);
     }
   }

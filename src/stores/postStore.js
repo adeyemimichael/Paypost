@@ -254,19 +254,150 @@ export const usePostStore = create((set, get) => ({
     }
   },
 
-  // Transaction methods (call backend)
+  // Transaction methods (mandatory blockchain + database)
   createSurvey: async (surveyData, wallet) => {
     try {
-      const result = await movementService.createSurvey(surveyData, wallet);
-      // Refresh data after successful transaction
-      if (wallet?.address) {
-        setTimeout(() => get().refreshAfterAction(wallet.address), 2000);
+      console.log('Creating survey with mandatory blockchain transaction...', surveyData);
+      console.log('Wallet address:', wallet.address);
+      
+      // Initialize Supabase if not already done
+      if (!supabaseService.initialized) {
+        console.log('Initializing Supabase service...');
+        const initialized = await supabaseService.initialize();
+        if (!initialized) {
+          throw new Error('Failed to initialize Supabase service');
+        }
       }
-      return result;
+      
+      // Step 1: Get or create user in database
+      console.log('Getting or creating user...');
+      const user = await supabaseService.getOrCreateUser(
+        wallet.address,
+        null, // email will be auto-generated if needed
+        'creator'
+      );
+
+      if (!user) {
+        throw new Error('Failed to create user in database');
+      }
+
+      console.log('User found/created:', user);
+
+      // Step 2: MANDATORY blockchain transaction first (this deducts tokens)
+      console.log('Creating survey on blockchain (MANDATORY)...');
+      const blockchainResult = await movementService.createSurvey(surveyData, wallet);
+      console.log('✅ Survey created on blockchain:', blockchainResult);
+
+      // Step 3: Only create in database if blockchain succeeds
+      console.log('Creating survey in database with blockchain confirmation...');
+      const survey = await supabaseService.createSurvey({
+        ...surveyData,
+        creatorId: user.id,
+        blockchain_tx_hash: blockchainResult.transactionHash,
+        blockchain_status: 'confirmed'
+      });
+
+      if (!survey) {
+        // This is a critical error - blockchain succeeded but database failed
+        console.error('❌ CRITICAL: Blockchain succeeded but database failed!');
+        throw new Error('Database creation failed after successful blockchain transaction. Please contact support with transaction hash: ' + blockchainResult.transactionHash);
+      }
+
+      console.log('✅ Survey created in database:', survey);
+
+      // Step 4: Refresh the surveys list
+      setTimeout(() => get().loadSurveysFromSupabase(), 1000);
+
+      return {
+        success: true,
+        surveyId: survey.id,
+        transactionHash: blockchainResult.transactionHash,
+        message: 'Survey created successfully on blockchain and database',
+        blockchainStatus: 'confirmed'
+      };
     } catch (error) {
-      console.error('Failed to create survey:', error);
-      throw error;
+      console.error('❌ Failed to create survey:', error);
+      
+      // Provide specific error messages
+      if (error.message.includes('INSUFFICIENT_BALANCE')) {
+        throw new Error('Insufficient MOVE tokens to create survey. Please fund your wallet.');
+      } else if (error.message.includes('Module not found')) {
+        throw new Error('Smart contract not deployed. Please contact support.');
+      } else {
+        throw error;
+      }
     }
+  },
+
+  // Get creator's surveys
+  getCreatorSurveys: async (walletAddress) => {
+    try {
+      if (!supabaseService.initialized) {
+        await supabaseService.initialize();
+      }
+
+      // Get user by wallet address
+      const user = await supabaseService.getUser(walletAddress);
+      if (!user) {
+        console.log('User not found for wallet:', walletAddress);
+        return [];
+      }
+
+      // Get surveys created by this user
+      const surveys = await supabaseService.getCreatorSurveys(user.id);
+      console.log('Creator surveys loaded:', surveys.length);
+      
+      return surveys;
+    } catch (error) {
+      console.error('Failed to get creator surveys:', error);
+      return [];
+    }
+  },
+
+  // Get creator stats
+  getCreatorStats: (walletAddress) => {
+    const { posts } = get();
+    
+    if (!walletAddress) {
+      return {
+        totalSurveys: 0,
+        activeSurveys: 0,
+        totalResponses: 0,
+        escrowBalance: 0
+      };
+    }
+
+    // Filter surveys created by this wallet address
+    const creatorSurveys = posts.filter(post => {
+      // Check both creator object and direct creator_wallet_address field
+      return post.creator?.wallet_address === walletAddress || 
+             post.creator_wallet_address === walletAddress;
+    });
+
+    console.log('Creator surveys found:', creatorSurveys.length, 'for wallet:', walletAddress);
+
+    const totalResponses = creatorSurveys.reduce((sum, survey) => 
+      sum + (survey.current_responses || 0), 0
+    );
+
+    const activeSurveys = creatorSurveys.filter(survey => survey.is_active).length;
+
+    // Calculate escrow balance (remaining rewards to be paid out)
+    const escrowBalance = creatorSurveys.reduce((sum, survey) => {
+      const remainingResponses = (survey.max_responses || 0) - (survey.current_responses || 0);
+      const rewardPerResponse = survey.reward_amount || 0;
+      return sum + (remainingResponses * rewardPerResponse);
+    }, 0);
+
+    const stats = {
+      totalSurveys: creatorSurveys.length,
+      activeSurveys,
+      totalResponses,
+      escrowBalance
+    };
+
+    console.log('Creator stats calculated:', stats);
+    return stats;
   },
 
   completeSurvey: async (surveyId, wallet) => {

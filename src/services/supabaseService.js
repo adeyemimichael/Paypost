@@ -195,9 +195,15 @@ class SupabaseService {
 
   async updateSurvey(surveyId, updates) {
     try {
+      // Handle blockchain-specific fields
+      const allowedUpdates = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('surveys')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update(allowedUpdates)
         .eq('id', surveyId)
         .select()
       

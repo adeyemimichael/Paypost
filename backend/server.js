@@ -40,7 +40,6 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
 
     // Create Aptos wallet using Privy API
     const wallet = await privy.wallets().create({
-      owner: { user_id: userId },
       chain_type: 'aptos'
     });
 
@@ -52,6 +51,7 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
         id: wallet.id,
         address: wallet.address,
         chainType: wallet.chain_type,
+        publicKey: wallet.public_key,  // Add the missing publicKey field
         createdAt: wallet.created_at
       }
     });
@@ -78,20 +78,37 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
 app.get('/api/wallets/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    console.log('Getting wallets for user:', userId);
     
-    // Get user's wallets from Privy
-    const user = await privy.users().getByUserId(userId);
-    const wallets = user.linked_accounts.filter(account => 
-      account.type === 'wallet'
-    );
+    // First get the user to verify they exist
+    const user = await privy.users().getById(userId);
+    console.log('User found:', user.id);
+    
+    // Get all wallets and filter by owner_id
+    const allWallets = await privy.wallets().list();
+    console.log('Total wallets in system:', allWallets.length);
+    
+    // Filter wallets that belong to this user
+    const userWallets = allWallets.filter(wallet => {
+      // Check if the wallet's owner_id corresponds to this user
+      return wallet.owner_id && (
+        wallet.owner_id === user.id || 
+        wallet.owner_id.includes(userId.split(':').pop()) // Handle DID format
+      );
+    });
+    
+    console.log('Found wallets for user:', userWallets.length);
+    console.log('User wallets:', userWallets.map(w => ({ id: w.id, address: w.address, chain: w.chain_type })));
 
     res.json({
       success: true,
-      wallets: wallets.map(wallet => ({
+      wallets: userWallets.map(wallet => ({
         id: wallet.id,
         address: wallet.address,
         chainType: wallet.chain_type,
-        walletClientType: wallet.wallet_client_type
+        walletClientType: 'privy',
+        publicKey: wallet.public_key,
+        createdAt: wallet.created_at
       }))
     });
 
@@ -99,6 +116,36 @@ app.get('/api/wallets/user/:userId', async (req, res) => {
     console.error('Failed to get user wallets:', error);
     res.status(500).json({ 
       error: 'Failed to get user wallets',
+      details: error.message 
+    });
+  }
+});
+
+// Get complete wallet info by wallet ID (to fetch missing publicKey)
+app.get('/api/wallets/:walletId/complete', async (req, res) => {
+  try {
+    const { walletId } = req.params;
+    console.log('Getting complete wallet info for:', walletId);
+    
+    // Get the complete wallet object from Privy
+    const wallet = await privy.wallets().get(walletId);
+    console.log('Complete wallet from Privy:', wallet);
+    
+    res.json({
+      success: true,
+      wallet: {
+        id: wallet.id,
+        address: wallet.address,
+        chainType: wallet.chain_type,
+        publicKey: wallet.public_key,
+        createdAt: wallet.created_at
+      }
+    });
+
+  } catch (error) {
+    console.error('Failed to get complete wallet info:', error);
+    res.status(500).json({ 
+      error: 'Failed to get complete wallet info',
       details: error.message 
     });
   }

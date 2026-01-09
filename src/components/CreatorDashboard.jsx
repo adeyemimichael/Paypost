@@ -1,14 +1,59 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, Users, CheckCircle, Clock, DollarSign, Eye } from 'lucide-react';
-import { useSurveyStore } from '../stores/surveyStore';
-import { useUserStore } from '../stores/userStore';
+import { usePostStore } from '../stores/postStore';
+import { useMovementWallet } from '../hooks/useMovementWallet';
+import { useEffect, useState } from 'react';
 import { fadeIn } from '../animations/fadeIn';
 import Card from './Card';
 
 const CreatorDashboard = () => {
-  const { createdSurveys, getCreatorStats } = useSurveyStore();
-  const { balance } = useUserStore();
-  const stats = getCreatorStats();
+  const { getCreatorSurveys, getCreatorStats, posts } = usePostStore();
+  const { wallet } = useMovementWallet();
+  const [createdSurveys, setCreatedSurveys] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load creator's surveys
+  useEffect(() => {
+    const loadCreatorSurveys = async () => {
+      if (!wallet?.address) return;
+      
+      setLoading(true);
+      try {
+        const surveys = await getCreatorSurveys(wallet.address);
+        setCreatedSurveys(surveys);
+        console.log('Loaded creator surveys:', surveys);
+      } catch (error) {
+        console.error('Failed to load creator surveys:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCreatorSurveys();
+  }, [wallet?.address, getCreatorSurveys, posts]); // Added posts dependency to refresh when surveys change
+
+  const stats = wallet?.address ? getCreatorStats(wallet.address) : {
+    totalSurveys: 0,
+    activeSurveys: 0,
+    totalResponses: 0,
+    escrowBalance: 0
+  };
+
+  console.log('Current stats:', stats, 'for wallet:', wallet?.address);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="p-4 animate-pulse">
+              <div className="h-16 bg-gray-200 rounded"></div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -84,12 +129,12 @@ const CreatorDashboard = () => {
                       <h3 className="text-lg font-semibold text-gray-900">{survey.title}</h3>
                       <span className={`
                         px-2 py-1 text-xs font-medium rounded-full
-                        ${survey.status === 'active' 
+                        ${survey.is_active 
                           ? 'bg-green-100 text-green-700' 
                           : 'bg-gray-100 text-gray-700'
                         }
                       `}>
-                        {survey.status}
+                        {survey.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </div>
                     
@@ -98,22 +143,22 @@ const CreatorDashboard = () => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div className="flex items-center text-gray-600">
                         <Users className="w-4 h-4 mr-2" />
-                        <span>{survey.responses}/{survey.maxResponses} responses</span>
+                        <span>{survey.current_responses || 0}/{survey.max_responses} responses</span>
                       </div>
                       
                       <div className="flex items-center text-gray-600">
                         <DollarSign className="w-4 h-4 mr-2" />
-                        <span>{survey.rewardAmount} MOVE/response</span>
+                        <span>{survey.reward_amount} MOVE/response</span>
                       </div>
                       
                       <div className="flex items-center text-gray-600">
                         <Clock className="w-4 h-4 mr-2" />
-                        <span>{survey.estimatedTime} min</span>
+                        <span>{survey.estimated_time || 5} min</span>
                       </div>
                       
                       <div className="flex items-center text-gray-600">
                         <Eye className="w-4 h-4 mr-2" />
-                        <span>{survey.questions.length} questions</span>
+                        <span>{survey.questions?.length || 0} questions</span>
                       </div>
                     </div>
                   </div>
@@ -122,13 +167,13 @@ const CreatorDashboard = () => {
                   <div className="ml-6 w-32">
                     <div className="text-right mb-1">
                       <span className="text-sm font-medium text-gray-700">
-                        {Math.round((survey.responses / survey.maxResponses) * 100)}%
+                        {Math.round(((survey.current_responses || 0) / survey.max_responses) * 100)}%
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div 
                         className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${(survey.responses / survey.maxResponses) * 100}%` }}
+                        style={{ width: `${((survey.current_responses || 0) / survey.max_responses) * 100}%` }}
                       />
                     </div>
                   </div>

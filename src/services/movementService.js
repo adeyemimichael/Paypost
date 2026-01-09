@@ -9,17 +9,51 @@ export const movementService = {
    */
   async submitTransaction(endpoint, payload, userWallet) {
     try {
+      // Handle both camelCase and snake_case field names from different sources
+      const walletData = {
+        walletId: userWallet.id,
+        publicKey: userWallet.publicKey || userWallet.public_key,
+        address: userWallet.address,
+        ...payload
+      };
+
+      // If publicKey is still missing, try to get it from the wallet service
+      if (!walletData.publicKey && userWallet.id) {
+        console.log('PublicKey missing, attempting to fetch from backend...');
+        try {
+          const { walletService } = await import('../services/walletService.js');
+          const completeWallet = await walletService.getCompleteWalletInfo(userWallet.id);
+          walletData.publicKey = completeWallet.publicKey;
+          console.log('Successfully fetched publicKey for wallet');
+        } catch (error) {
+          console.error('Failed to fetch publicKey:', error);
+        }
+      }
+
+      // Validate required fields
+      if (!walletData.walletId || !walletData.publicKey || !walletData.address) {
+        console.error('Missing wallet fields:', {
+          walletId: !!walletData.walletId,
+          publicKey: !!walletData.publicKey,
+          address: !!walletData.address,
+          wallet: userWallet
+        });
+        console.error('Full wallet object:', JSON.stringify(userWallet, null, 2));
+        
+        // If publicKey is still missing, provide helpful error
+        if (!walletData.publicKey) {
+          throw new Error('Unable to retrieve wallet publicKey. Please try refreshing the page.');
+        }
+        
+        throw new Error('Missing required fields: walletId, publicKey, address, surveyData');
+      }
+
       const response = await fetch(`${API_BASE_URL}/transactions/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          walletId: userWallet.id,
-          publicKey: userWallet.publicKey,
-          address: userWallet.address,
-          ...payload
-        })
+        body: JSON.stringify(walletData)
       });
 
       if (!response.ok) {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { 
   Menu, 
   X, 
@@ -15,7 +15,8 @@ import {
   ChevronDown,
   Info,
   HelpCircle,
-  Coins
+  Coins,
+  RefreshCw
 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { useMovementWallet } from '../hooks/useMovementWallet';
@@ -28,13 +29,10 @@ const Navbar = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   
   const { login, logout, authenticated, user: privyUser } = usePrivy();
-  const { wallets } = useWallets();
-  const { createWallet } = useCreateWallet();
-  const { wallet, balance, isLoading } = useMovementWallet();
+  const { wallet, balance, isLoading, fetchBalance } = useMovementWallet();
 
   // Find the Aptos wallet specifically for display
-  const aptosWallet = wallets.find(w => w.chainType === 'aptos');
-  const displayWallet = aptosWallet || wallet;
+  const displayWallet = wallet;
   
   const { 
     userRole, 
@@ -68,6 +66,7 @@ const Navbar = () => {
       await logout();
       setUserRole(null);
       setShowUserMenu(false);
+      // Wallet store will automatically reset when user logs out
     } catch (error) {
       console.error('Disconnect failed:', error);
       notify.error('Failed to disconnect wallet');
@@ -83,6 +82,7 @@ const Navbar = () => {
   ];
 
   const creatorNavigation = [
+    { name: 'Dashboard', href: '/creator-dashboard', icon: Users },
     { name: 'Create Survey', href: '/create-survey', icon: Plus },
   ];
 
@@ -98,22 +98,8 @@ const Navbar = () => {
   // Helper to get display identifier (email or wallet)
   const getUserIdentifier = () => {
     if (privyUser?.email?.address) return privyUser.email.address;
-    if (displayWallet?.address) return formatAddress(displayWallet.address);
+    if (wallet?.address) return formatAddress(wallet.address);
     return 'User';
-  };
-
-  // Check if user has Aptos wallet for Movement
-  const hasAptosWallet = wallets.some(w => w.chainType === 'aptos');
-  const needsAptosWallet = authenticated && !hasAptosWallet;
-
-  const handleCreateAptosWallet = async () => {
-    try {
-      await createWallet({ chainType: 'aptos' });
-      notify.success('Aptos wallet created! You can now use Movement features.');
-    } catch (error) {
-      console.error('Failed to create Aptos wallet:', error);
-      notify.error('Failed to create Aptos wallet. Please try again.');
-    }
   };
 
   return (
@@ -185,6 +171,22 @@ const Navbar = () => {
                 <span className="font-bold text-green-700">
                   {isLoading ? '...' : `${(balance || 0).toFixed(2)}`} MOVE
                 </span>
+                <button
+                  onClick={async () => {
+                    console.log('Refreshing balance...');
+                    try {
+                      await fetchBalance();
+                      notify.success('Balance refreshed!');
+                    } catch (error) {
+                      notify.error('Failed to refresh balance');
+                      console.error('Balance refresh error:', error);
+                    }
+                  }}
+                  className="ml-2 p-1 text-green-600 hover:text-green-700 hover:bg-green-100 rounded transition-colors"
+                  title="Refresh balance"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
               </div>
             )}
 
@@ -233,16 +235,18 @@ const Navbar = () => {
                         </div>
                         
                         {/* Explicit Wallet Address Display */}
-                        {privyUser?.wallet ? (
+                        {displayWallet ? (
                           <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
-                            <div className="text-xs text-gray-500 mb-1">Wallet Address</div>
+                            <div className="text-xs text-gray-500 mb-1">
+                              {displayWallet.chainType === 'aptos' ? 'Movement Wallet' : 'Wallet Address'}
+                            </div>
                             <div className="flex items-center justify-between">
                               <code className="text-xs text-gray-700 truncate mr-2">
-                                {formatAddress(privyUser.wallet.address)}
+                                {formatAddress(displayWallet.address)}
                               </code>
                               <button 
                                 onClick={() => {
-                                  navigator.clipboard.writeText(privyUser.wallet.address);
+                                  navigator.clipboard.writeText(displayWallet.address);
                                   notify.success('Address copied!');
                                 }}
                                 className="text-blue-600 hover:text-blue-700 text-xs font-medium"
@@ -250,6 +254,11 @@ const Navbar = () => {
                                 Copy
                               </button>
                             </div>
+                            {displayWallet.chainType === 'aptos' && (
+                              <div className="text-xs text-green-600 mt-1">
+                                ✅ Movement wallet
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
@@ -353,6 +362,16 @@ const Navbar = () => {
                   <span className="font-bold text-green-700">
                     {isLoading ? '...' : `${(balance || 0).toFixed(2)}`} MOVE
                   </span>
+                  <button
+                    onClick={() => {
+                      console.log('Refreshing balance...');
+                      fetchBalance();
+                    }}
+                    className="text-green-600 hover:text-green-700 text-xs ml-1"
+                    title="Refresh balance"
+                  >
+                    🔄
+                  </button>
                 </div>
               </div>
             )}

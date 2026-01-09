@@ -25,7 +25,7 @@ import { notify } from '../utils/notify';
 const CreateSurveyPage = () => {
   const navigate = useNavigate();
   const { authenticated } = usePrivy();
-  const { wallet, balance, createSurvey: walletCreateSurvey } = useMovementWallet();
+  const { wallet, balance, isLoading: walletLoading, createSurvey: walletCreateSurvey } = useMovementWallet();
   const { isCreator } = useUserStore();
   const { createSurvey } = usePostStore();
   
@@ -171,6 +171,16 @@ const CreateSurveyPage = () => {
       notify.error('Please connect your wallet first');
       return;
     }
+
+    // Debug: Log wallet structure
+    console.log('Wallet object before creating survey:', wallet);
+    console.log('Wallet fields:', {
+      id: wallet.id,
+      address: wallet.address,
+      publicKey: wallet.publicKey,
+      public_key: wallet.public_key,
+      chainType: wallet.chainType || wallet.chain_type
+    });
 
     setIsLoading(true);
     

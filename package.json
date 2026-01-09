@@ -6,7 +6,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "contract:build": "./build.sh",
+    "contract:deploy": "node deploy.js"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.0",

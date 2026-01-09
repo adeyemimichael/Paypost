@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Wallet, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useMovementWallet } from '../hooks/useMovementWallet';
+import { useWalletStore } from '../stores/walletStore';
 import { formatTokenAmount } from '../utils/formatters';
 
 const WalletBalance = ({ className = '', showLabel = true, size = 'md' }) => {
   const { authenticated } = usePrivy();
-  const { balance, fetchBalance, isLoading } = useMovementWallet();
+  const { balance, fetchBalance, isLoading } = useWalletStore();
   
   const [showBalance, setShowBalance] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
