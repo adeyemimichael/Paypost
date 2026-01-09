@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { supabaseService } from '../services/supabaseService';
 import { movementService } from '../services/movementService';
-import { movementService } from '../services/movementService';
 
 export const usePostStore = create((set, get) => ({
   posts: [], 
@@ -411,12 +410,6 @@ export const usePostStore = create((set, get) => ({
       escrowBalance
     };
 
-    return stats;
-      totalResponses,
-      escrowBalance
-    };
-
-    console.log('Creator stats calculated:', stats);
     return stats;
   },
 
