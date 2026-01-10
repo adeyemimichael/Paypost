@@ -159,9 +159,6 @@ const AppContent = () => {
             <Route path="/creator-dashboard" element={<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"><CreatorDashboard /></div>} />
             <Route path="/apply-creator" element={<CreatorApplicationPage />} />
             <Route path="/create-survey" element={<CreateSurveyPage />} />
-            <Route path="/status" element={<StatusPage />} />
-            <Route path="/test" element={<TestPage />} />
-            <Route path="/wallet-status" element={<WalletStatusPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/how-it-works" element={<HowItWorksPage />} />
             <Route path="/faq" element={<FAQPage />} />
