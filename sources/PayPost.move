@@ -1,6 +1,7 @@
 module PayPost::ContentPlatform {
     use std::signer;
     use std::vector;
+    use std::option;
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::event;
@@ -15,6 +16,7 @@ module PayPost::ContentPlatform {
     const E_MAX_RESPONSES_REACHED: u64 = 6;
     const E_INSUFFICIENT_FUNDS: u64 = 7;
     const E_SURVEY_EXPIRED: u64 = 8;
+    const E_ACTIVE_SURVEY_EXISTS: u64 = 9;
 
     /// Survey structure with funding pool
     struct Survey has key, store {
@@ -118,6 +120,10 @@ module PayPost::ContentPlatform {
         
         let creator_addr = signer::address_of(creator);
         let registry = borrow_global_mut<SurveyRegistry>(@PayPost);
+        
+        // Check if creator already has an active survey
+        assert!(!has_active_survey(&registry.surveys, creator_addr), E_ACTIVE_SURVEY_EXISTS);
+        
         let now = timestamp::now_seconds();
         
         // Calculate total funding needed (rewards + platform fee)
@@ -175,7 +181,6 @@ module PayPost::ContentPlatform {
         
         // Find the survey
         let survey_index = find_survey_index(&registry.surveys, survey_id);
-        assert!(survey_index < vector::length(&registry.surveys), E_SURVEY_NOT_FOUND);
         
         let survey = vector::borrow_mut(&mut registry.surveys, survey_index);
         
@@ -268,7 +273,6 @@ module PayPost::ContentPlatform {
         let registry = borrow_global_mut<SurveyRegistry>(@PayPost);
         
         let survey_index = find_survey_index(&registry.surveys, survey_id);
-        assert!(survey_index < vector::length(&registry.surveys), E_SURVEY_NOT_FOUND);
         
         let survey = vector::borrow_mut(&mut registry.surveys, survey_index);
         assert!(survey.creator == creator_addr, E_NOT_AUTHORIZED);
@@ -307,7 +311,6 @@ module PayPost::ContentPlatform {
     public fun get_survey(survey_id: u64): (address, vector<u8>, u64, u64, u64, u64, bool) acquires SurveyRegistry {
         let registry = borrow_global<SurveyRegistry>(@PayPost);
         let survey_index = find_survey_index(&registry.surveys, survey_id);
-        assert!(survey_index < vector::length(&registry.surveys), E_SURVEY_NOT_FOUND);
         
         let survey = vector::borrow(&registry.surveys, survey_index);
         (
@@ -371,7 +374,23 @@ module PayPost::ContentPlatform {
         active_surveys
     }
 
-    /// Helper function to find survey index
+    /// Helper function to find survey index - returns Option
+    fun find_survey_index_opt(surveys: &vector<Survey>, survey_id: u64): option::Option<u64> {
+        let i = 0;
+        let len = vector::length(surveys);
+        
+        while (i < len) {
+            let survey = vector::borrow(surveys, i);
+            if (survey.id == survey_id) {
+                return option::some(i)
+            };
+            i = i + 1;
+        };
+        
+        option::none<u64>()
+    }
+
+    /// Helper function to find survey index - aborts if not found (for existing functions)
     fun find_survey_index(surveys: &vector<Survey>, survey_id: u64): u64 {
         let i = 0;
         let len = vector::length(surveys);
@@ -384,6 +403,22 @@ module PayPost::ContentPlatform {
             i = i + 1;
         };
         
-        len // Return length if not found (will cause assertion failure)
+        abort E_SURVEY_NOT_FOUND
+    }
+
+    /// Helper function to check if creator has active survey
+    fun has_active_survey(surveys: &vector<Survey>, creator: address): bool {
+        let i = 0;
+        let len = vector::length(surveys);
+        
+        while (i < len) {
+            let survey = vector::borrow(surveys, i);
+            if (survey.creator == creator && survey.is_active) {
+                return true
+            };
+            i = i + 1;
+        };
+        
+        false
     }
 }

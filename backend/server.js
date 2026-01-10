@@ -466,9 +466,32 @@ app.post('/api/transactions/create-survey', async (req, res) => {
 
   } catch (error) {
     console.error('Create survey error:', error);
+    
+    // Enhanced error handling for smart contract errors
+    let errorMessage = error.message;
+    let errorCode = 'UNKNOWN_ERROR';
+    
+    if (error.message.includes('E_ACTIVE_SURVEY_EXISTS') || error.message.includes('ACTIVE_SURVEY_EXISTS')) {
+      errorMessage = 'You already have an active survey. Please wait for it to complete or close it before creating a new one.';
+      errorCode = 'ACTIVE_SURVEY_EXISTS';
+    } else if (error.message.includes('E_INSUFFICIENT_FUNDS') || error.message.includes('INSUFFICIENT_FUNDS')) {
+      errorMessage = 'Insufficient MOVE tokens to create survey. Please fund your wallet.';
+      errorCode = 'INSUFFICIENT_FUNDS';
+    } else if (error.message.includes('E_INVALID_REWARD') || error.message.includes('INVALID_REWARD')) {
+      errorMessage = 'Invalid reward amount or max responses. Please check your survey parameters.';
+      errorCode = 'INVALID_REWARD';
+    } else if (error.message.includes('find_survey_index')) {
+      errorMessage = 'Smart contract state error. Please try again or contact support.';
+      errorCode = 'CONTRACT_STATE_ERROR';
+    } else if (error.message.includes('Module not found')) {
+      errorMessage = 'Smart contract not deployed. Please contact support.';
+      errorCode = 'CONTRACT_NOT_DEPLOYED';
+    }
+    
     res.status(500).json({ 
-      error: error.message,
-      details: error.stack 
+      error: errorMessage,
+      code: errorCode,
+      details: error.message
     });
   }
 });

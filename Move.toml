@@ -1,0 +1,15 @@
+[package]
+name = "PayPost"
+version = "1.0.1"
+authors = ["PayPost Team"]
+
+[addresses]
+PayPost = "_"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "aptos-node-v1.8.0" }
+
+[dev-addresses]
+PayPost = "0x1"
+
+[dev-dependencies]

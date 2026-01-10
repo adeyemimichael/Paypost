@@ -227,19 +227,33 @@ export class TransactionService {
   }
 
   buildCloseSurveyPayload(surveyId) {
+    // Ensure surveyId is a number for blockchain operations
+    const numericSurveyId = typeof surveyId === 'string' ? parseInt(surveyId) : surveyId;
+    
+    if (isNaN(numericSurveyId)) {
+      throw new Error(`Invalid survey ID: ${surveyId}. Expected a numeric ID for blockchain operations.`);
+    }
+    
     return {
       function: `${MODULE_ADDRESS}::${MODULE_NAME}::close_survey`,
-      functionArguments: [surveyId]
+      functionArguments: [numericSurveyId]
     };
   }
 
   buildCompleteSurveyPayload(surveyId) {
+    // Ensure surveyId is a number for blockchain operations
+    const numericSurveyId = typeof surveyId === 'string' ? parseInt(surveyId) : surveyId;
+    
+    if (isNaN(numericSurveyId)) {
+      throw new Error(`Invalid survey ID: ${surveyId}. Expected a numeric ID for blockchain operations.`);
+    }
+    
     const responseHash = Array.from(new TextEncoder().encode("response"));
     
     return {
       function: `${MODULE_ADDRESS}::${MODULE_NAME}::complete_survey`,
       functionArguments: [
-        surveyId,
+        numericSurveyId,
         responseHash
       ]
     };
@@ -278,24 +292,77 @@ export class TransactionService {
 
   async getSurveys() {
     try {
+      console.log('🔍 Attempting to get surveys from:', MODULE_ADDRESS);
+      console.log('🔍 Resource type:', `${MODULE_ADDRESS}::${MODULE_NAME}::SurveyRegistry`);
+      
       const resource = await aptos.getAccountResource({
         accountAddress: MODULE_ADDRESS,
         resourceType: `${MODULE_ADDRESS}::${MODULE_NAME}::SurveyRegistry`,
       });
 
-      const surveysData = resource.data.surveys;
-      return surveysData.map(s => ({
-        id: s.id,
-        creator: s.creator,
-        title: new TextDecoder().decode(new Uint8Array(s.title)),
-        description: new TextDecoder().decode(new Uint8Array(s.description)),
-        reward: Number(s.reward_amount) / 100000000,
-        maxResponses: Number(s.max_responses),
-        responses: Number(s.current_responses),
-        isActive: s.is_active,
-        timestamp: Number(s.created_at) * 1000
-      }));
+      console.log('🔍 Resource response:', resource ? 'Found' : 'Not found');
+      console.log('🔍 Resource keys:', resource ? Object.keys(resource) : 'No resource');
+      console.log('🔍 Full resource:', JSON.stringify(resource, null, 2));
+
+      // Try different ways to access the data
+      const data = resource?.data || resource;
+      console.log('🔍 Data object:', data ? 'Has data' : 'No data');
+      console.log('🔍 Data keys:', data ? Object.keys(data) : 'No data keys');
+      console.log('🔍 Surveys array:', data?.surveys ? `${data.surveys.length} surveys` : 'No surveys array');
+
+      if (!data || !data.surveys) {
+        console.log('📊 No surveys found in smart contract registry');
+        return [];
+      }
+
+      const surveysData = data.surveys;
+      console.log(`📊 Found ${surveysData.length} surveys in registry`);
+      
+      return surveysData.map(s => {
+        // Decode hex strings to text
+        let title = 'Untitled Survey';
+        let description = 'No description';
+        
+        try {
+          if (s.title && s.title.startsWith && s.title.startsWith('0x')) {
+            const titleBytes = s.title.slice(2);
+            title = new TextDecoder().decode(new Uint8Array(titleBytes.match(/.{1,2}/g).map(byte => parseInt(byte, 16))));
+          } else if (Array.isArray(s.title)) {
+            title = new TextDecoder().decode(new Uint8Array(s.title));
+          }
+        } catch (e) {
+          console.warn('Failed to decode title:', e);
+        }
+        
+        try {
+          if (s.description && s.description.startsWith && s.description.startsWith('0x')) {
+            const descBytes = s.description.slice(2);
+            description = new TextDecoder().decode(new Uint8Array(descBytes.match(/.{1,2}/g).map(byte => parseInt(byte, 16))));
+          } else if (Array.isArray(s.description)) {
+            description = new TextDecoder().decode(new Uint8Array(s.description));
+          }
+        } catch (e) {
+          console.warn('Failed to decode description:', e);
+        }
+
+        return {
+          id: parseInt(s.id),
+          creator: s.creator,
+          title: title,
+          description: description,
+          reward_amount: Number(s.reward_amount) / 100000000,
+          max_responses: Number(s.max_responses),
+          current_responses: Number(s.current_responses),
+          isActive: s.is_active,
+          timestamp: Number(s.created_at) * 1000
+        };
+      });
     } catch (error) {
+      console.error('❌ Error getting surveys:', error.message);
+      if (error.message.includes('Resource not found') || error.message.includes('Account not found')) {
+        console.log('📊 Smart contract not deployed or no surveys created yet');
+        return [];
+      }
       console.error('Failed to get surveys from chain:', error);
       return [];
     }

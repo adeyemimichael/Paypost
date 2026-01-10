@@ -59,6 +59,16 @@ export const movementService = {
       return await response.json();
     } catch (error) {
       console.error('Transaction submission failed:', error);
+      
+      // Handle specific error cases with better messages
+      if (error.message.includes('Account not found')) {
+        throw new Error('Wallet not funded. Please add MOVE tokens to your wallet first. Visit the Movement faucet at https://faucet.testnet.movementnetwork.xyz/ to get free testnet tokens.');
+      } else if (error.message.includes('INSUFFICIENT_BALANCE')) {
+        throw new Error('Insufficient MOVE tokens. Please add more tokens to your wallet.');
+      } else if (error.message.includes('Module not found')) {
+        throw new Error('Smart contract not deployed. Please contact support.');
+      }
+      
       throw error;
     }
   },
@@ -163,7 +173,15 @@ export const movementService = {
    */
   async hasCompletedSurvey(address, surveyId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/survey-completion/${address}/${surveyId}`);
+      // Ensure surveyId is numeric for blockchain operations
+      const numericSurveyId = typeof surveyId === 'string' ? parseInt(surveyId) : surveyId;
+      
+      if (isNaN(numericSurveyId)) {
+        console.warn('Cannot check completion for non-numeric survey ID:', surveyId);
+        return false;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/survey-completion/${address}/${numericSurveyId}`);
       if (!response.ok) {
         throw new Error('Failed to check survey completion');
       }
@@ -193,8 +211,32 @@ export const movementService = {
   },
 
   /**
-   * Test backend connection
+   * Check if wallet exists and is funded on Movement blockchain
    */
+  async checkWalletStatus(address) {
+    try {
+      const balance = await this.getBalance(address);
+      return {
+        exists: balance >= 0,
+        balance: balance,
+        needsFunding: balance === 0
+      };
+    } catch (error) {
+      return {
+        exists: false,
+        balance: 0,
+        needsFunding: true,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Get Movement testnet faucet URL
+   */
+  getFaucetUrl() {
+    return 'https://faucet.testnet.movementnetwork.xyz/';
+  },
   async testConnection() {
     try {
       const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`);

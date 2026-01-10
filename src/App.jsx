@@ -5,6 +5,7 @@ import { ToastContainer } from 'react-toastify';
 import { useUserStore } from './stores/userStore';
 import { usePostStore } from './stores/postStore';
 import { useWalletStore } from './stores/walletStore';
+import ErrorBoundary from './components/ErrorBoundary';
 import NewNavbar from './components/NewNavbar';
 import RoleSelectionModal from './components/RoleSelectionModal';
 import Home from './pages/Home';
@@ -162,6 +163,9 @@ const AppContent = () => {
             <Route path="/about" element={<AboutPage />} />
             <Route path="/how-it-works" element={<HowItWorksPage />} />
             <Route path="/faq" element={<FAQPage />} />
+            <Route path="/status" element={<StatusPage />} />
+            <Route path="/test" element={<TestPage />} />
+            <Route path="/wallet-status" element={<WalletStatusPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -193,24 +197,39 @@ const AppContent = () => {
 const App = () => {
   const privyAppId = import.meta.env.VITE_PRIVY_APP_ID;
 
+  if (!privyAppId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center p-8">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Configuration Error</h1>
+          <p className="text-gray-600">
+            Missing Privy App ID. Please check your environment configuration.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <PrivyProvider
-      appId={privyAppId}
-      config={{
-        // Simple email and social login only - Privy handles wallet creation
-        loginMethods: ['email', 'google'],
-        appearance: {
-          theme: 'light',
-          accentColor: '#6366f1',
-        },
-        embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
-          requireUserPasswordOnCreate: false,
-        },
-      }}
-    >
-      <AppContent />
-    </PrivyProvider>
+    <ErrorBoundary>
+      <PrivyProvider
+        appId={privyAppId}
+        config={{
+          // Simple email and social login only - Privy handles wallet creation
+          loginMethods: ['email', 'google'],
+          appearance: {
+            theme: 'light',
+            accentColor: '#6366f1',
+          },
+          embeddedWallets: {
+            createOnLogin: 'users-without-wallets',
+            requireUserPasswordOnCreate: false,
+          },
+        }}
+      >
+        <AppContent />
+      </PrivyProvider>
+    </ErrorBoundary>
   );
 };
 

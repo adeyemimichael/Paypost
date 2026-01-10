@@ -28,10 +28,26 @@ export const usePostStore = create(
             }
           }
           
-          await supabaseService.initialize();
-          await get().loadSurveysFromSupabase();
-          if (userAddress) {
-            await get().loadUserSupabaseActivity(userAddress);
+          // Try to initialize Supabase, but don't fail if it's not available
+          try {
+            const supabaseInitialized = await supabaseService.initialize();
+            if (supabaseInitialized) {
+              await get().loadSurveysFromSupabase();
+              if (userAddress) {
+                await get().loadUserSupabaseActivity(userAddress);
+              }
+            } else {
+              console.log('⚠️ Supabase not available, using blockchain data only');
+            }
+          } catch (supabaseError) {
+            console.warn('⚠️ Supabase initialization failed, continuing without it:', supabaseError.message);
+          }
+          
+          // If no data loaded, use mock data
+          const { posts } = get();
+          if (posts.length === 0) {
+            console.log('📊 No surveys loaded, using mock data');
+            get().loadMockSurveys();
           }
         } catch (error) {
           console.error('❌ Failed to initialize post store:', error);
@@ -47,7 +63,7 @@ export const usePostStore = create(
           const surveys = await movementService.getSurveys();
           
           const transformedSurveys = surveys.map(survey => ({
-            id: survey.id,
+            id: survey.id, // Use the actual survey ID from blockchain
             title: survey.title,
             description: survey.description,
             reward: survey.reward_amount,
@@ -65,7 +81,9 @@ export const usePostStore = create(
               required: true
             }],
             type: 'survey',
-            source: 'chain'
+            source: 'chain',
+            creatorAddress: survey.creator,
+            actualSurveyId: survey.id // Store the blockchain survey ID
           }));
 
           set({ posts: transformedSurveys });
@@ -137,7 +155,11 @@ export const usePostStore = create(
       loadUserSupabaseActivity: async (userAddress) => {
         try {
           if (!supabaseService.initialized) {
-            await supabaseService.initialize();
+            const initialized = await supabaseService.initialize();
+            if (!initialized) {
+              console.log('⚠️ Supabase not available for user activity');
+              return;
+            }
           }
           
           const user = await supabaseService.getUser(userAddress);
@@ -207,7 +229,7 @@ export const usePostStore = create(
 
       createSurvey: async (surveyData, wallet) => {
         try {
-          console.log('Creating survey with mandatory blockchain transaction...', surveyData);
+          console.log('Creating survey with blockchain transaction...', surveyData);
           
           if (!supabaseService.initialized) {
             await supabaseService.initialize();
@@ -218,33 +240,42 @@ export const usePostStore = create(
             throw new Error('Failed to create user in database');
           }
 
+          // Check if user already has an active survey
+          console.log('🔍 Checking for existing active surveys...');
           try {
             const surveys = await movementService.getSurveys();
             const userActiveSurveys = surveys.filter(s => 
-              s.creator.toLowerCase() === wallet.address.toLowerCase() && s.isActive
+              s.creator && s.creator.toLowerCase() === wallet.address.toLowerCase() && s.isActive
             );
             
             if (userActiveSurveys.length > 0) {
-              for (const survey of userActiveSurveys) {
-                try {
-                  await movementService.closeSurvey(survey.id, wallet);
-                } catch (closeError) {
-                  console.warn(`Failed to close survey ${survey.id}:`, closeError);
-                }
-              }
+              console.log(`❌ User has ${userActiveSurveys.length} active survey(s). Cannot create new survey.`);
+              throw new Error('You already have an active survey. Please wait for it to complete or expire before creating a new one. Due to smart contract limitations, only one active survey per creator is allowed.');
             }
-          } catch (error) {
-            console.warn('Failed to check existing surveys:', error);
+          } catch (checkError) {
+            if (checkError.message.includes('already have an active survey')) {
+              throw checkError;
+            }
+            console.warn('⚠️ Failed to check existing surveys:', checkError);
+            // Continue anyway - the blockchain will enforce the constraint
           }
 
+          // Attempt to create survey directly
+          console.log('🚀 Creating survey on blockchain...');
           const blockchainResult = await movementService.createSurvey(surveyData, wallet);
+          console.log('✅ Survey created successfully:', blockchainResult.transactionHash);
 
-          const survey = await supabaseService.createSurvey({
-            ...surveyData,
-            creatorId: user.id,
-            blockchain_tx_hash: blockchainResult.transactionHash,
-            blockchain_status: 'confirmed'
-          });
+          // Save to Supabase
+          try {
+            const survey = await supabaseService.createSurvey({
+              ...surveyData,
+              creatorId: user.id,
+              blockchain_tx_hash: blockchainResult.transactionHash
+            });
+            console.log('✅ Survey saved to Supabase:', survey.id);
+          } catch (dbError) {
+            console.warn('⚠️ Failed to save to Supabase, but blockchain transaction succeeded:', dbError);
+          }
 
           const newSurvey = {
             id: blockchainResult.transactionHash,
@@ -273,24 +304,56 @@ export const usePostStore = create(
             posts: [newSurvey, ...state.posts]
           }));
 
+          // Refresh data after a delay
           setTimeout(() => {
             get().loadSurveysFromSupabase();
             if (typeof window !== 'undefined' && window.useWalletStore) {
               window.useWalletStore.getState().fetchBalance();
             }
-          }, 1000);
+          }, 2000);
 
           return blockchainResult;
         } catch (error) {
           console.error('Failed to create survey:', error);
           
-          if (error.message.includes('INSUFFICIENT_BALANCE')) {
+          if (error.message.includes('INSUFFICIENT_BALANCE') || error.message.includes('Insufficient balance')) {
             throw new Error('Insufficient MOVE tokens to create survey. Please fund your wallet.');
           } else if (error.message.includes('Module not found')) {
             throw new Error('Smart contract not deployed. Please contact support.');
+          } else if (error.message.includes('find_survey_index')) {
+            throw new Error('Survey creation failed due to smart contract state inconsistency. You may have an existing survey that cannot be properly detected. Please contact support or try again later.');
+          } else if (error.message.includes('ACTIVE_SURVEY_EXISTS') || error.message.includes('E_ACTIVE_SURVEY_EXISTS')) {
+            throw new Error('You already have an active survey. Please wait for it to complete or close it before creating a new one.');
+          } else if (error.message.includes('already have an active survey')) {
+            throw error; // Pass through the specific error message
+          } else if (error.message.includes('Transaction failed')) {
+            throw new Error('Survey creation failed. This may be due to an existing active survey or smart contract limitations. Please ensure you don\'t have any active surveys and try again.');
           } else {
             throw error;
           }
+        }
+      },
+
+      // Manual survey management
+      closeSurvey: async (surveyId, wallet) => {
+        try {
+          console.log('🔒 Closing survey:', surveyId);
+          const result = await movementService.closeSurvey(surveyId, wallet);
+          console.log('✅ Survey closed successfully:', result);
+          
+          // Update local state
+          set(state => ({
+            posts: state.posts.map(post => 
+              post.id === surveyId 
+                ? { ...post, isActive: false }
+                : post
+            )
+          }));
+          
+          return result;
+        } catch (error) {
+          console.error('❌ Failed to close survey:', error);
+          throw error;
         }
       },
 
@@ -315,21 +378,54 @@ export const usePostStore = create(
 
       completeSurvey: async (surveyId, wallet, responseData) => {
         try {
-          if (!supabaseService.initialized) {
-            await supabaseService.initialize();
+          // Find the survey to get its blockchain ID
+          const { posts } = get();
+          const survey = posts.find(p => p.id === surveyId);
+          if (!survey) {
+            throw new Error('Survey not found');
           }
 
-          const user = await supabaseService.getOrCreateUser(wallet.address, null, 'participant');
-          if (!user) {
-            throw new Error('Failed to create user in database');
+          // Use the blockchain survey ID if available, otherwise try to parse the surveyId
+          let blockchainSurveyId;
+          if (survey.actualSurveyId !== undefined) {
+            blockchainSurveyId = survey.actualSurveyId;
+          } else if (survey.source === 'chain' && typeof survey.id === 'number') {
+            blockchainSurveyId = survey.id;
+          } else if (typeof survey.id === 'number') {
+            blockchainSurveyId = survey.id;
+          } else {
+            // Try to parse as number for blockchain operations
+            const parsed = parseInt(survey.id);
+            if (!isNaN(parsed)) {
+              blockchainSurveyId = parsed;
+            } else {
+              throw new Error('Cannot complete survey: blockchain survey ID not found. This survey may not be deployed to the blockchain.');
+            }
           }
 
-          const hasCompleted = await supabaseService.hasCompletedSurvey(surveyId, user.id);
-          if (hasCompleted) {
-            throw new Error('You have already completed this survey');
-          }
+          console.log('Completing survey with blockchain ID:', blockchainSurveyId);
+          
+          // Complete survey on blockchain first (this is the main operation)
+          const blockchainResult = await movementService.completeSurvey(blockchainSurveyId, wallet);
 
-          const blockchainResult = await movementService.completeSurvey(surveyId, wallet);
+          // Try to save to Supabase if available, but don't fail if it's not
+          try {
+            if (supabaseService.initialized || (await supabaseService.initialize().catch(() => false))) {
+              const user = await supabaseService.getOrCreateUser(wallet.address, null, 'participant');
+              if (user) {
+                await supabaseService.saveResponse(
+                  surveyId,
+                  user.id,
+                  responseData || {},
+                  blockchainResult.transactionHash || blockchainResult.hash
+                );
+                console.log('✅ Response saved to Supabase');
+              }
+            }
+          } catch (supabaseError) {
+            console.warn('⚠️ Failed to save to Supabase, but blockchain transaction succeeded:', supabaseError.message);
+            // Don't throw - blockchain operation succeeded
+          }
 
           await supabaseService.saveResponse(
             surveyId,
@@ -430,12 +526,21 @@ export const usePostStore = create(
       // Missing functions that components expect
       hasUserCompletedSurvey: async (surveyId, userAddress) => {
         try {
-          if (!supabaseService.initialized) {
-            await supabaseService.initialize();
+          // First check blockchain completion status
+          const hasCompletedOnChain = await movementService.hasCompletedSurvey(userAddress, surveyId);
+          if (hasCompletedOnChain) {
+            return true;
           }
-          const user = await supabaseService.getUser(userAddress);
-          if (!user) return false;
-          return await supabaseService.hasCompletedSurvey(surveyId, user.id);
+
+          // Then check Supabase if available
+          if (supabaseService.initialized || (await supabaseService.initialize().catch(() => false))) {
+            const user = await supabaseService.getUser(userAddress);
+            if (user) {
+              return await supabaseService.hasCompletedSurvey(surveyId, user.id);
+            }
+          }
+          
+          return false;
         } catch (error) {
           console.error('Failed to check survey completion:', error);
           return false;

@@ -5,8 +5,8 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 let supabase = null;
 
-// Only initialize Supabase if both URL and key are provided
-if (supabaseUrl && supabaseKey && supabaseKey.length > 20) {
+// Only initialize Supabase if both URL and key are provided and key looks valid
+if (supabaseUrl && supabaseKey && supabaseKey.length > 50 && supabaseKey.startsWith('eyJ')) {
   try {
     supabase = createClient(supabaseUrl, supabaseKey);
     console.log('✅ Supabase client initialized');
@@ -15,7 +15,7 @@ if (supabaseUrl && supabaseKey && supabaseKey.length > 20) {
     supabase = null;
   }
 } else {
-  console.warn('⚠️ Supabase configuration missing or invalid, running without database');
+  console.log('ℹ️ Supabase disabled - using blockchain-only mode for core survey functionality');
 }
 
 export { supabase };
@@ -28,21 +28,24 @@ class SupabaseService {
   async initialize() {
     try {
       if (!supabase) {
-        throw new Error('Supabase client not initialized');
+        console.warn('⚠️ Supabase client not available, skipping initialization');
+        return false;
       }
 
       const { data, error } = await supabase.from('users').select('count').limit(1);
       
       if (error && error.code !== 'PGRST116') {
-        throw new Error(`Supabase connection failed: ${error.message}`);
+        console.warn(`⚠️ Supabase connection failed: ${error.message}`);
+        return false;
       }
       
       this.initialized = true;
       console.log('✅ Supabase service initialized successfully');
       return true;
     } catch (error) {
-      console.error('❌ Supabase initialization failed:', error.message);
-      throw error;
+      console.warn('⚠️ Supabase initialization failed:', error.message);
+      this.initialized = false;
+      return false;
     }
   }
 
@@ -192,8 +195,8 @@ class SupabaseService {
           estimated_time: surveyData.estimatedTime || 5,
           expires_at: surveyData.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           creator_id: surveyData.creatorId,
-          blockchain_tx_hash: surveyData.blockchain_tx_hash,
-          blockchain_status: surveyData.blockchain_status || 'confirmed'
+          blockchain_tx_hash: surveyData.blockchain_tx_hash
+          // Removed blockchain_status since column doesn't exist
         }])
         .select()
       

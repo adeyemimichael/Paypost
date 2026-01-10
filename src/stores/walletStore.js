@@ -9,6 +9,7 @@ export const useWalletStore = create(
       // State
       wallet: null,
       balance: 0,
+      walletStatus: null,
       isLoading: false,
       isInitialized: false,
       
@@ -94,11 +95,26 @@ export const useWalletStore = create(
         try {
           console.log('Fetching balance for:', wallet.address);
           const balance = await movementService.getBalance(wallet.address);
-          set({ balance, isLoading: false });
+          const status = await movementService.checkWalletStatus(wallet.address);
+          
+          set({ 
+            balance, 
+            walletStatus: status,
+            isLoading: false 
+          });
+          
           console.log('Balance updated:', balance);
+          
+          if (status.needsFunding) {
+            console.warn('⚠️ Wallet needs funding:', wallet.address);
+          }
         } catch (error) {
           console.error('Failed to fetch balance:', error);
-          set({ isLoading: false });
+          set({ 
+            balance: 0,
+            walletStatus: { exists: false, needsFunding: true },
+            isLoading: false 
+          });
         }
       },
 
@@ -107,6 +123,7 @@ export const useWalletStore = create(
         set({
           wallet: null,
           balance: 0,
+          walletStatus: null,
           isLoading: false,
           isInitialized: false
         });

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePrivy } from '@privy-io/react-auth';
-import { X, CheckCircle, Clock, Users, Gift, AlertCircle } from 'lucide-react';
+import { X, CheckCircle, Clock, Users, Gift, AlertCircle, ExternalLink } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { usePostStore } from '../stores/postStore';
 import { useWalletStore } from '../stores/walletStore';
+import { movementService } from '../services/movementService';
 import { formatPrice } from '../utils/formatters';
 import { scaleIn } from '../animations/fadeIn';
 import { notify } from '../utils/notify';
@@ -20,6 +21,7 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
   const [responses, setResponses] = useState({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [walletStatus, setWalletStatus] = useState(null);
 
   // Check if already completed using the postStore method
   const [alreadyCompleted, setAlreadyCompleted] = useState(false);
@@ -27,19 +29,82 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
   useEffect(() => {
     const checkCompletion = async () => {
       if (post && wallet?.address) {
-        const completed = await hasUserCompletedSurvey(wallet.address, post.id);
-        setAlreadyCompleted(completed);
+        try {
+          const completed = await hasUserCompletedSurvey(post.id, wallet.address);
+          setAlreadyCompleted(completed);
+        } catch (error) {
+          console.error('Failed to check survey completion:', error);
+          // Don't block the user if we can't check completion status
+          setAlreadyCompleted(false);
+        }
       }
     };
     checkCompletion();
   }, [post, wallet?.address, hasUserCompletedSurvey]);
 
-  if (!isOpen || !post) {
-    return null;
-  }
+  // Check wallet status when modal opens
+  useEffect(() => {
+    const checkWalletStatus = async () => {
+      if (wallet?.address && isOpen) {
+        try {
+          const status = await movementService.checkWalletStatus(wallet.address);
+          setWalletStatus(status);
+        } catch (error) {
+          console.error('Failed to check wallet status:', error);
+          setWalletStatus({ exists: false, needsFunding: true });
+        }
+      }
+    };
+    checkWalletStatus();
+  }, [wallet?.address, isOpen]);
 
   // Show message if already completed
   if (alreadyCompleted) {
+
+  // Show wallet funding message if needed
+  if (walletStatus && walletStatus.needsFunding) {
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50"
+          onClick={onClose}
+        />
+        <div className="flex min-h-full items-center justify-center p-4">
+          <motion.div
+            {...scaleIn}
+            className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
+          >
+            <div className="text-center py-8">
+              <AlertCircle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Wallet Needs Funding</h3>
+              <p className="text-gray-600 mb-4">
+                Your wallet needs MOVE tokens to complete surveys. Get free testnet tokens from the Movement faucet.
+              </p>
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <p className="text-sm text-gray-600 mb-2">Your wallet address:</p>
+                <p className="font-mono text-sm break-all">{wallet?.address}</p>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <Button
+                  onClick={() => window.open(movementService.getFaucetUrl(), '_blank')}
+                  className="flex items-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Get Free Tokens
+                </Button>
+                <Button variant="secondary" onClick={onClose}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
     return (
       <div className="fixed inset-0 z-50 overflow-y-auto">
         <motion.div
