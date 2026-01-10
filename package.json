@@ -11,10 +11,6 @@
     "contract:deploy": "node deploy.js"
   },
   "dependencies": {
-    "@aptos-labs/ts-sdk": "^5.2.0",
-    "@aptos-labs/wallet-adapter-ant-design": "^5.3.7",
-    "@aptos-labs/wallet-adapter-react": "^7.2.7",
-    "@nightlylabs/wallet-selector-aptos": "^0.1.20",
     "@privy-io/react-auth": "^1.32.0",
     "axios": "^1.6.0",
     "framer-motion": "^10.12.4",

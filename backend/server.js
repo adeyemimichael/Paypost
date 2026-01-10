@@ -24,6 +24,10 @@ app.use(cors({
     'http://localhost:5174', 
     'http://localhost:5175', 
     'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:5175',
     'https://paypost.vercel.app',
     'https://paypost-7jthfan6v-adeyemimichaels-projects.vercel.app',
     'https://paypost-cgvzsv0c2-adeyemimichaels-projects.vercel.app'

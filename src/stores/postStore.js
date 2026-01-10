@@ -1,7 +1,70 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { movementService } from '../services/movementService';
+import { movementService, isUUID } from '../services/movementService';
 import { supabaseService } from '../services/supabaseService';
+
+// Helper function to complete survey via Supabase only (for UUID surveys or blockchain fallback)
+async function completeSurveySupabaseOnly(surveyId, wallet, responseData, survey, get, set) {
+  try {
+    console.log('📝 Completing survey via Supabase only:', surveyId);
+    
+    // Initialize Supabase if needed
+    if (!supabaseService.initialized) {
+      await supabaseService.initialize();
+    }
+    
+    // Get or create user
+    const user = await supabaseService.getOrCreateUser(wallet.address, null, 'participant');
+    if (!user) {
+      throw new Error('Failed to create user in database');
+    }
+    
+    // Check if already completed
+    const alreadyCompleted = await supabaseService.hasCompletedSurvey(surveyId, user.id);
+    if (alreadyCompleted) {
+      throw new Error('You have already completed this survey');
+    }
+    
+    // Save response to Supabase
+    const savedResponse = await supabaseService.saveResponse(
+      surveyId,
+      user.id,
+      responseData || {},
+      null // No blockchain tx hash
+    );
+    
+    if (!savedResponse) {
+      throw new Error('Failed to save survey response');
+    }
+    
+    console.log('✅ Survey response saved to Supabase:', savedResponse.id);
+    
+    // Update local state
+    set(state => ({
+      posts: state.posts.map(post => 
+        post.id === surveyId 
+          ? { ...post, responses: (post.responses || 0) + 1 }
+          : post
+      ),
+      userEarnings: (state.userEarnings || 0) + (survey.reward || 0)
+    }));
+    
+    // Refresh data
+    setTimeout(() => {
+      get().loadSurveysFromSupabase();
+    }, 1000);
+    
+    return {
+      success: true,
+      source: 'supabase',
+      responseId: savedResponse.id,
+      message: 'Survey completed successfully. Rewards will be processed.'
+    };
+  } catch (error) {
+    console.error('❌ Failed to complete survey via Supabase:', error);
+    throw error;
+  }
+}
 
 export const usePostStore = create(
   persist(
@@ -447,72 +510,90 @@ export const usePostStore = create(
 
       completeSurvey: async (surveyId, wallet, responseData) => {
         try {
-          // Find the survey to get its blockchain ID
+          // Find the survey to get its details
           const { posts } = get();
           const survey = posts.find(p => p.id === surveyId);
           if (!survey) {
             throw new Error('Survey not found');
           }
 
-          // Use the blockchain survey ID if available, otherwise try to parse the surveyId
+          // For UUID surveys (Supabase-only), skip blockchain entirely
+          if (isUUID(surveyId)) {
+            console.log('📝 UUID survey detected, completing via Supabase only:', surveyId);
+            return await completeSurveySupabaseOnly(surveyId, wallet, responseData, survey, get, set);
+          }
+
+          // Use the blockchain survey ID if available, otherwise try to find it
           let blockchainSurveyId;
-          if (survey.actualSurveyId !== undefined) {
+          if (survey.actualSurveyId !== undefined && survey.actualSurveyId !== null) {
             blockchainSurveyId = survey.actualSurveyId;
+            console.log('Using actualSurveyId:', blockchainSurveyId);
           } else if (survey.source === 'chain' && typeof survey.id === 'number') {
             blockchainSurveyId = survey.id;
+            console.log('Using chain survey.id:', blockchainSurveyId);
           } else if (typeof survey.id === 'number') {
             blockchainSurveyId = survey.id;
+            console.log('Using numeric survey.id:', blockchainSurveyId);
           } else {
             // Try to parse as number for blockchain operations
             const parsed = parseInt(survey.id);
-            if (!isNaN(parsed)) {
+            if (!isNaN(parsed) && parsed >= 0) {
               blockchainSurveyId = parsed;
+              console.log('Parsed survey.id as number:', blockchainSurveyId);
             } else {
-              throw new Error('Cannot complete survey: blockchain survey ID not found. This survey may not be deployed to the blockchain.');
+              // Survey ID is not numeric - complete via Supabase only
+              console.log('📝 Non-numeric survey ID, completing via Supabase only:', survey.id);
+              return await completeSurveySupabaseOnly(surveyId, wallet, responseData, survey, get, set);
             }
           }
 
           console.log('Completing survey with blockchain ID:', blockchainSurveyId);
           
-          // Complete survey on blockchain first (this is the main operation)
-          const blockchainResult = await movementService.completeSurvey(blockchainSurveyId, wallet);
-
-          // Try to save to Supabase if available, but don't fail if it's not
+          // Try to complete survey on blockchain first
           try {
-            if (supabaseService.initialized || (await supabaseService.initialize().catch(() => false))) {
-              const user = await supabaseService.getOrCreateUser(wallet.address, null, 'participant');
-              if (user) {
-                await supabaseService.saveResponse(
-                  surveyId,
-                  user.id,
-                  responseData || {},
-                  blockchainResult.transactionHash || blockchainResult.hash
-                );
-                console.log('✅ Response saved to Supabase');
+            const blockchainResult = await movementService.completeSurvey(blockchainSurveyId, wallet);
+
+            // Save to Supabase as backup
+            try {
+              if (supabaseService.initialized || (await supabaseService.initialize().catch(() => false))) {
+                const user = await supabaseService.getOrCreateUser(wallet.address, null, 'participant');
+                if (user) {
+                  await supabaseService.saveResponse(
+                    surveyId,
+                    user.id,
+                    responseData || {},
+                    blockchainResult.transactionHash || blockchainResult.hash
+                  );
+                  console.log('✅ Response saved to Supabase');
+                }
               }
+            } catch (supabaseError) {
+              console.warn('⚠️ Failed to save to Supabase, but blockchain transaction succeeded:', supabaseError.message);
             }
-          } catch (supabaseError) {
-            console.warn('⚠️ Failed to save to Supabase, but blockchain transaction succeeded:', supabaseError.message);
-            // Don't throw - blockchain operation succeeded
+
+            // Update local state
+            set(state => ({
+              posts: state.posts.map(post => 
+                post.id === surveyId 
+                  ? { ...post, responses: (post.responses || 0) + 1 }
+                  : post
+              ),
+              userEarnings: (state.userEarnings || 0) + (survey.reward || 0)
+            }));
+
+            setTimeout(() => {
+              get().loadSurveysFromSupabase();
+              if (typeof window !== 'undefined' && window.useWalletStore) {
+                window.useWalletStore.getState().fetchBalance();
+              }
+            }, 1000);
+
+            return blockchainResult;
+          } catch (blockchainError) {
+            console.warn('⚠️ Blockchain transaction failed, falling back to Supabase:', blockchainError.message);
+            // Fallback to Supabase-only completion
+            return await completeSurveySupabaseOnly(surveyId, wallet, responseData, survey, get, set);
           }
-
-          set(state => ({
-            posts: state.posts.map(post => 
-              post.id === surveyId 
-                ? { ...post, responses: (post.responses || 0) + 1 }
-                : post
-            ),
-            userEarnings: (state.userEarnings || 0) + (state.posts.find(p => p.id === surveyId)?.reward || 0)
-          }));
-
-          setTimeout(() => {
-            get().loadSurveysFromSupabase();
-            if (typeof window !== 'undefined' && window.useWalletStore) {
-              window.useWalletStore.getState().fetchBalance();
-            }
-          }, 1000);
-
-          return blockchainResult;
         } catch (error) {
           console.error('Failed to complete survey:', error);
           throw error;
@@ -588,13 +669,24 @@ export const usePostStore = create(
       // Missing functions that components expect
       hasUserCompletedSurvey: async (surveyId, userAddress) => {
         try {
-          // First check blockchain completion status
+          // For UUID surveys (Supabase-only), check Supabase only
+          if (isUUID(surveyId)) {
+            if (supabaseService.initialized || (await supabaseService.initialize().catch(() => false))) {
+              const user = await supabaseService.getUser(userAddress);
+              if (user) {
+                return await supabaseService.hasCompletedSurvey(surveyId, user.id);
+              }
+            }
+            return false;
+          }
+
+          // For numeric IDs, check blockchain first
           const hasCompletedOnChain = await movementService.hasCompletedSurvey(userAddress, surveyId);
           if (hasCompletedOnChain) {
             return true;
           }
 
-          // Then check Supabase if available
+          // Then check Supabase as fallback
           if (supabaseService.initialized || (await supabaseService.initialize().catch(() => false))) {
             const user = await supabaseService.getUser(userAddress);
             if (user) {

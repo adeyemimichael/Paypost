@@ -316,10 +316,62 @@ class SupabaseService {
         throw new Error(error.message || 'Failed to save response');
       }
 
-      return (await response.json())[0];
+      const savedResponse = (await response.json())[0];
+      
+      // Increment the survey's response count
+      if (savedResponse) {
+        await this.incrementSurveyResponseCount(surveyId);
+      }
+      
+      return savedResponse;
     } catch (error) {
       console.error('Failed to save response:', error);
       return null;
+    }
+  }
+
+  async incrementSurveyResponseCount(surveyId) {
+    if (!isValidConfig) return false;
+    
+    try {
+      // First get current count
+      const getResponse = await fetch(
+        `${this.baseUrl}/rest/v1/surveys?id=eq.${surveyId}&select=current_responses,max_responses`,
+        { headers: this.getHeaders() }
+      );
+      
+      if (!getResponse.ok) return false;
+      
+      const surveys = await getResponse.json();
+      if (surveys.length === 0) return false;
+      
+      const survey = surveys[0];
+      const newCount = (survey.current_responses || 0) + 1;
+      const isMaxReached = newCount >= survey.max_responses;
+      
+      // Update the count
+      const updatePayload = {
+        current_responses: newCount
+      };
+      
+      // Mark as inactive if max reached
+      if (isMaxReached) {
+        updatePayload.is_active = false;
+      }
+      
+      const updateResponse = await fetch(
+        `${this.baseUrl}/rest/v1/surveys?id=eq.${surveyId}`,
+        {
+          method: 'PATCH',
+          headers: this.getHeaders(),
+          body: JSON.stringify(updatePayload)
+        }
+      );
+      
+      return updateResponse.ok;
+    } catch (error) {
+      console.error('Failed to increment survey response count:', error);
+      return false;
     }
   }
 

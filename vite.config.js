@@ -12,14 +12,6 @@ export default defineConfig({
       '@': '/src',
     },
   },
-  optimizeDeps: {
-    exclude: ['@supabase/supabase-js']
-  },
-  build: {
-    rollupOptions: {
-      external: ['@supabase/supabase-js']
-    }
-  },
   server: {
     proxy: {
       '/api/movement': {

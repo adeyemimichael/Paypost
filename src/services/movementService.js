@@ -3,6 +3,13 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
+// Helper function to detect UUID format (Supabase IDs)
+export function isUUID(id) {
+  if (typeof id !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
 export const movementService = {
   /**
    * Submit transaction to backend for signing and execution
@@ -173,11 +180,17 @@ export const movementService = {
    */
   async hasCompletedSurvey(address, surveyId) {
     try {
+      // For UUID surveys (Supabase-only), skip blockchain check entirely
+      // This is expected behavior - UUIDs are not stored on blockchain
+      if (isUUID(surveyId)) {
+        return false; // Let Supabase handle UUID survey completion checks
+      }
+
       // Ensure surveyId is numeric for blockchain operations
       const numericSurveyId = typeof surveyId === 'string' ? parseInt(surveyId) : surveyId;
       
       if (isNaN(numericSurveyId)) {
-        console.warn('Cannot check completion for non-numeric survey ID:', surveyId);
+        // Non-numeric, non-UUID ID - can't check on blockchain
         return false;
       }
 

@@ -60,6 +60,33 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
 
   // Show message if already completed
   if (alreadyCompleted) {
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50"
+          onClick={onClose}
+        />
+        <div className="flex min-h-full items-center justify-center p-4">
+          <motion.div
+            {...scaleIn}
+            className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
+          >
+            <div className="text-center py-8">
+              <AlertCircle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Already Completed</h3>
+              <p className="text-gray-600 mb-4">
+                You've already completed this survey. Each participant can only complete a survey once.
+              </p>
+              <Button onClick={onClose}>Close</Button>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   // Show wallet funding message if needed
   if (walletStatus && walletStatus.needsFunding) {
@@ -99,33 +126,6 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
                   Close
                 </Button>
               </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black bg-opacity-50"
-          onClick={onClose}
-        />
-        <div className="flex min-h-full items-center justify-center p-4">
-          <motion.div
-            {...scaleIn}
-            className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
-          >
-            <div className="text-center py-8">
-              <AlertCircle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Already Completed</h3>
-              <p className="text-gray-600 mb-4">
-                You've already completed this survey. Each participant can only complete a survey once.
-              </p>
-              <Button onClick={onClose}>Close</Button>
             </div>
           </motion.div>
         </div>
