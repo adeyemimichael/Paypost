@@ -185,12 +185,20 @@ const CreateSurveyPage = () => {
     setIsLoading(true);
     
     try {
-      // Create survey data
+      // Create survey data with questions
       const newSurveyData = {
         title: surveyData.title,
         description: surveyData.description,
         rewardAmount: surveyData.rewardAmount,
-        maxResponses: surveyData.maxResponses
+        maxResponses: surveyData.maxResponses,
+        questions: surveyData.questions.map(q => ({
+          id: q.id,
+          type: q.type,
+          text: q.question,
+          question: q.question,
+          options: q.options?.filter(opt => opt.trim()) || [],
+          required: true
+        }))
       };
 
       // Submit to backend for signing and execution

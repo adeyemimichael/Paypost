@@ -1,68 +1,57 @@
-import { createClient } from '@supabase/supabase-js'
+// Supabase REST API service - uses fetch instead of the SDK to avoid bundler issues
+// This provides the same functionality without the problematic SDK
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-let supabase = null;
-
-// Only initialize Supabase if both URL and key are provided and key looks valid
-if (supabaseUrl && supabaseKey && supabaseKey.length > 50 && supabaseKey.startsWith('eyJ')) {
-  try {
-    supabase = createClient(supabaseUrl, supabaseKey);
-    console.log('✅ Supabase client initialized');
-  } catch (error) {
-    console.warn('⚠️ Failed to initialize Supabase:', error);
-    supabase = null;
-  }
-} else {
-  console.log('ℹ️ Supabase disabled - using blockchain-only mode for core survey functionality');
-}
-
-export { supabase };
+const isValidConfig = SUPABASE_URL && SUPABASE_KEY && SUPABASE_KEY.length > 50 && SUPABASE_KEY.startsWith('eyJ');
 
 class SupabaseService {
   constructor() {
     this.initialized = false;
+    this.baseUrl = SUPABASE_URL;
+    this.apiKey = SUPABASE_KEY;
+  }
+
+  getHeaders() {
+    return {
+      'apikey': this.apiKey,
+      'Authorization': `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    };
   }
 
   async initialize() {
-    try {
-      if (!supabase) {
-        console.warn('⚠️ Supabase client not available, skipping initialization');
-        return false;
-      }
+    if (!isValidConfig) {
+      console.log('ℹ️ Supabase disabled - invalid configuration');
+      return false;
+    }
 
-      const { data, error } = await supabase.from('users').select('count').limit(1);
+    try {
+      // Test connection
+      const response = await fetch(`${this.baseUrl}/rest/v1/users?select=count&limit=1`, {
+        headers: this.getHeaders()
+      });
       
-      if (error && error.code !== 'PGRST116') {
-        console.warn(`⚠️ Supabase connection failed: ${error.message}`);
+      if (response.ok) {
+        this.initialized = true;
+        console.log('✅ Supabase service initialized successfully');
+        return true;
+      } else {
+        console.warn('⚠️ Supabase connection failed:', response.status);
         return false;
       }
-      
-      this.initialized = true;
-      console.log('✅ Supabase service initialized successfully');
-      return true;
     } catch (error) {
       console.warn('⚠️ Supabase initialization failed:', error.message);
-      this.initialized = false;
       return false;
     }
   }
 
-  async createUser(walletAddress, email, role, displayName = null, privyUserId = null) {
+  async createUser(walletAddress, email, role, displayName = null) {
+    if (!isValidConfig) return null;
+    
     try {
-      if (!supabase || !this.initialized) {
-        await this.initialize();
-      }
-
-      if (!walletAddress || typeof walletAddress !== 'string') {
-        throw new Error(`Invalid wallet address: ${walletAddress}`);
-      }
-      
-      if (!email || typeof email !== 'string') {
-        throw new Error(`Invalid email: ${email}`);
-      }
-
       const userData = { 
         wallet_address: walletAddress, 
         email, 
@@ -70,497 +59,310 @@ class SupabaseService {
         display_name: displayName || `${role}_${walletAddress.slice(0, 8)}`
       };
 
-      const { data, error } = await supabase
-        .from('users')
-        .insert([userData])
-        .select()
-      
-      if (error) {
-        throw error;
+      const response = await fetch(`${this.baseUrl}/rest/v1/users`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(userData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create user');
       }
-      
-      return data[0]
+
+      const data = await response.json();
+      return data[0];
     } catch (error) {
       console.error('Failed to create user:', error);
-      throw error;
+      return null;
     }
   }
 
-  async getOrCreateUser(walletAddress, email = null, role = 'reader', privyUserId = null) {
+  async getOrCreateUser(walletAddress, email = null, role = 'reader') {
     try {
-      // First try to get existing user by wallet address
       let user = await this.getUser(walletAddress);
       
-      // Skip Privy ID lookup since column doesn't exist in current schema
-      // if (!user && privyUserId) {
-      //   user = await this.getUserByPrivyId(privyUserId);
-      // }
-      
       if (!user) {
-        // Create new user if doesn't exist
         user = await this.createUser(
           walletAddress, 
           email || `${walletAddress}@paypost.xyz`, 
-          role,
-          null,
-          privyUserId
+          role
         );
       }
       
       return user;
     } catch (error) {
       console.error('Failed to get or create user:', error);
-      return null;
+      return { id: walletAddress, wallet_address: walletAddress, role };
     }
   }
 
   async getUser(walletAddress) {
+    if (!isValidConfig) return null;
+    
     try {
-      if (!supabase || !this.initialized) {
-        await this.initialize();
-      }
+      const response = await fetch(
+        `${this.baseUrl}/rest/v1/users?wallet_address=eq.${walletAddress}&limit=1`,
+        { headers: this.getHeaders() }
+      );
 
-      if (!walletAddress || typeof walletAddress !== 'string') {
-        throw new Error('Invalid wallet address');
-      }
+      if (!response.ok) return null;
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('wallet_address', walletAddress)
-        .single()
-      
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-      return data
+      const data = await response.json();
+      return data[0] || null;
     } catch (error) {
       console.error('Failed to get user:', error);
       return null;
     }
   }
 
-  async getUserByPrivyId(privyUserId) {
-    // This method is disabled since privy_user_id column doesn't exist in current schema
-    console.log('getUserByPrivyId skipped - column not available in current schema');
-    return null;
-    
-    /* 
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('privy_user_id', privyUserId)
-        .single()
-      
-      if (error && error.code !== 'PGRST116') throw error
-      return data
-    } catch (error) {
-      console.error('Failed to get user by Privy ID:', error);
-      return null;
-    }
-    */
-  }
-
-  async updateUser(walletAddress, updates) {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('wallet_address', walletAddress)
-        .select()
-      
-      if (error) throw error
-      return data[0]
-    } catch (error) {
-      console.error('Failed to update user:', error);
-      throw error;
-    }
-  }
-
   async createSurvey(surveyData) {
+    if (!isValidConfig) return null;
+    
     try {
-      if (!supabase || !this.initialized) {
-        await this.initialize();
-      }
-
-      const { data, error } = await supabase
-        .from('surveys')
-        .insert([{
-          title: surveyData.title,
-          description: surveyData.description,
-          category: surveyData.category || 'general',
-          reward_amount: surveyData.rewardAmount,
-          max_responses: surveyData.maxResponses,
-          estimated_time: surveyData.estimatedTime || 5,
-          expires_at: surveyData.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          creator_id: surveyData.creatorId,
-          blockchain_tx_hash: surveyData.blockchain_tx_hash
-          // Removed blockchain_status since column doesn't exist
-        }])
-        .select()
-      
-      if (error) throw error
-      return data[0]
-    } catch (error) {
-      console.error('Failed to create survey:', error);
-      throw error;
-    }
-  }
-
-  async updateSurvey(surveyId, updates) {
-    try {
-      // Handle blockchain-specific fields
-      const allowedUpdates = {
-        ...updates,
-        updated_at: new Date().toISOString()
+      const payload = {
+        title: surveyData.title,
+        description: surveyData.description,
+        category: surveyData.category || 'general',
+        reward_amount: surveyData.rewardAmount,
+        max_responses: surveyData.maxResponses,
+        estimated_time: surveyData.estimatedTime || 5,
+        expires_at: surveyData.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        creator_id: surveyData.creatorId,
+        blockchain_tx_hash: surveyData.blockchain_tx_hash
       };
 
-      const { data, error } = await supabase
-        .from('surveys')
-        .update(allowedUpdates)
-        .eq('id', surveyId)
-        .select()
-      
-      if (error) throw error
-      return data[0]
+      const response = await fetch(`${this.baseUrl}/rest/v1/surveys`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create survey');
+      }
+
+      const data = await response.json();
+      return data[0];
     } catch (error) {
-      console.error('Failed to update survey:', error);
-      throw error;
+      console.error('Failed to create survey:', error);
+      return null;
     }
   }
 
   async getSurveys(filters = {}) {
+    if (!isValidConfig) return [];
+    
     try {
-      if (!supabase || !this.initialized) {
-        await this.initialize();
-      }
-
-      let query = supabase
-        .from('surveys')
-        .select(`
-          *,
-          creator:users!surveys_creator_id_fkey(display_name, wallet_address),
-          questions:survey_questions(*),
-          _count:survey_responses(count)
-        `)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-
-      if (filters.category && filters.category !== 'all') {
-        query = query.eq('category', filters.category)
-      }
-
-      if (filters.creatorId) {
-        query = query.eq('creator_id', filters.creatorId)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
+      let url = `${this.baseUrl}/rest/v1/surveys?is_active=eq.true&order=created_at.desc`;
       
-      return data.map(survey => ({
-        ...survey,
-        creator: survey.creator || { display_name: 'Unknown', wallet_address: '' },
-        responseCount: survey._count?.[0]?.count || 0
-      }))
+      if (filters.category && filters.category !== 'all') {
+        url += `&category=eq.${filters.category}`;
+      }
+
+      const response = await fetch(url, { headers: this.getHeaders() });
+
+      if (!response.ok) return [];
+
+      const surveys = await response.json();
+      
+      // Fetch questions for each survey
+      const surveysWithQuestions = await Promise.all(surveys.map(async (survey) => {
+        const questions = await this.getSurveyQuestions(survey.id);
+        return { ...survey, questions };
+      }));
+
+      return surveysWithQuestions;
     } catch (error) {
       console.error('Failed to get surveys:', error);
-      return this.getMockSurveys();
-    }
-  }
-
-  async getCreatorSurveys(creatorId) {
-    try {
-      const { data, error } = await supabase
-        .from('surveys')
-        .select(`
-          *,
-          questions:survey_questions(*),
-          responses:survey_responses(count)
-        `)
-        .eq('creator_id', creatorId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      return data.map(survey => ({
-        ...survey,
-        responseCount: survey.responses?.[0]?.count || 0
-      }))
-    } catch (error) {
-      console.error('Failed to get creator surveys:', error);
       return [];
     }
   }
 
-  // Survey Questions Management
-  async createSurveyQuestions(surveyId, questions) {
-    try {
-      const questionsData = questions.map((question, index) => ({
-        survey_id: surveyId,
-        question_text: question.text,
-        question_type: question.type,
-        options: question.options ? JSON.stringify(question.options) : null,
-        required: question.required !== false,
-        order_index: index
-      }));
-
-      const { data, error } = await supabase
-        .from('survey_questions')
-        .insert(questionsData)
-        .select()
-      
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error('Failed to create survey questions:', error);
-      throw error;
-    }
-  }
-
   async getSurveyQuestions(surveyId) {
+    if (!isValidConfig) return [];
+    
     try {
-      const { data, error } = await supabase
-        .from('survey_questions')
-        .select('*')
-        .eq('survey_id', surveyId)
-        .order('order_index')
+      const response = await fetch(
+        `${this.baseUrl}/rest/v1/survey_questions?survey_id=eq.${surveyId}&order=order_index`,
+        { headers: this.getHeaders() }
+      );
 
-      if (error) throw error
-      return data.map(q => ({
+      if (!response.ok) return [];
+
+      const questions = await response.json();
+      return questions.map(q => ({
         ...q,
-        options: q.options ? JSON.parse(q.options) : null
-      }))
+        options: q.options ? (typeof q.options === 'string' ? JSON.parse(q.options) : q.options) : null
+      }));
     } catch (error) {
       console.error('Failed to get survey questions:', error);
       return [];
     }
   }
 
-  // Response Management
-  async saveResponse(surveyId, participantId, responseData, txHash = null) {
+  async getSurveyByTitle(title) {
+    if (!isValidConfig) return null;
+    
     try {
-      if (!supabase || !this.initialized) {
-        await this.initialize();
+      const response = await fetch(
+        `${this.baseUrl}/rest/v1/surveys?title=eq.${encodeURIComponent(title)}&limit=1`,
+        { headers: this.getHeaders() }
+      );
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      return data[0] || null;
+    } catch (error) {
+      console.error('Failed to get survey by title:', error);
+      return null;
+    }
+  }
+
+  async getQuestionsByTitle(title) {
+    if (!isValidConfig) return [];
+    
+    try {
+      // First find the survey by title
+      const survey = await this.getSurveyByTitle(title);
+      if (!survey) return [];
+      
+      // Then get its questions
+      return await this.getSurveyQuestions(survey.id);
+    } catch (error) {
+      console.error('Failed to get questions by title:', error);
+      return [];
+    }
+  }
+
+  async getAllSurveysWithQuestions() {
+    if (!isValidConfig) return [];
+    
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/rest/v1/surveys?order=created_at.desc`,
+        { headers: this.getHeaders() }
+      );
+
+      if (!response.ok) return [];
+
+      const surveys = await response.json();
+      
+      // Fetch questions for each survey
+      const surveysWithQuestions = await Promise.all(surveys.map(async (survey) => {
+        const questions = await this.getSurveyQuestions(survey.id);
+        return { ...survey, questions };
+      }));
+
+      return surveysWithQuestions;
+    } catch (error) {
+      console.error('Failed to get all surveys with questions:', error);
+      return [];
+    }
+  }
+
+  async createSurveyQuestions(surveyId, questions) {
+    if (!isValidConfig) return [];
+    
+    try {
+      const questionsData = questions.map((question, index) => ({
+        survey_id: surveyId,
+        question_text: question.text || question.question,
+        question_type: question.type,
+        options: question.options ? JSON.stringify(question.options) : null,
+        required: question.required !== false,
+        order_index: index
+      }));
+
+      const response = await fetch(`${this.baseUrl}/rest/v1/survey_questions`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(questionsData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create questions');
       }
 
-      const { data, error } = await supabase
-        .from('survey_responses')
-        .insert([{
-          survey_id: surveyId,
-          participant_id: participantId,
-          response_data: JSON.stringify(responseData),
-          blockchain_tx_hash: txHash
-        }])
-        .select()
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to create survey questions:', error);
+      return [];
+    }
+  }
 
-      if (error) throw error
+  async saveResponse(surveyId, participantId, responseData, txHash = null) {
+    if (!isValidConfig) return null;
+    
+    try {
+      const payload = {
+        survey_id: surveyId,
+        participant_id: participantId,
+        response_data: JSON.stringify(responseData),
+        blockchain_tx_hash: txHash
+      };
 
-      await this.incrementSurveyResponses(surveyId);
+      const response = await fetch(`${this.baseUrl}/rest/v1/survey_responses`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(payload)
+      });
 
-      return data[0]
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to save response');
+      }
+
+      return (await response.json())[0];
     } catch (error) {
       console.error('Failed to save response:', error);
-      throw error;
+      return null;
     }
   }
 
   async hasCompletedSurvey(surveyId, participantId) {
+    if (!isValidConfig) return false;
+    
     try {
-      if (!supabase || !this.initialized) {
-        await this.initialize();
-      }
+      const response = await fetch(
+        `${this.baseUrl}/rest/v1/survey_responses?survey_id=eq.${surveyId}&participant_id=eq.${participantId}&limit=1`,
+        { headers: this.getHeaders() }
+      );
 
-      const { data, error } = await supabase
-        .from('survey_responses')
-        .select('id')
-        .eq('survey_id', surveyId)
-        .eq('participant_id', participantId)
-        .single()
+      if (!response.ok) return false;
 
-      return !!data && !error
+      const data = await response.json();
+      return data.length > 0;
     } catch (error) {
       return false;
     }
   }
 
-  async incrementSurveyResponses(surveyId) {
+  async getCreatorSurveys(creatorId) {
+    if (!isValidConfig) return [];
+    
     try {
-      const { error } = await supabase.rpc('increment_survey_responses', {
-        survey_id: surveyId
-      });
-      
-      if (error) {
-        // Fallback: manual increment
-        const { data: survey } = await supabase
-          .from('surveys')
-          .select('current_responses')
-          .eq('id', surveyId)
-          .single();
-        
-        if (survey) {
-          await supabase
-            .from('surveys')
-            .update({ current_responses: (survey.current_responses || 0) + 1 })
-            .eq('id', surveyId);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to increment survey responses:', error);
-    }
-  }
+      const response = await fetch(
+        `${this.baseUrl}/rest/v1/surveys?creator_id=eq.${creatorId}&order=created_at.desc`,
+        { headers: this.getHeaders() }
+      );
 
-  // Analytics
-  async getSurveyAnalytics(surveyId) {
-    try {
-      const { data, error } = await supabase
-        .from('survey_responses')
-        .select('response_data, completed_at')
-        .eq('survey_id', surveyId)
+      if (!response.ok) return [];
 
-      if (error) throw error
-      return data.map(response => ({
-        ...response,
-        response_data: JSON.parse(response.response_data)
-      }))
+      return await response.json();
     } catch (error) {
-      console.error('Failed to get survey analytics:', error);
+      console.error('Failed to get creator surveys:', error);
       return [];
     }
   }
 
   async getUserStats(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select(`
-          total_earnings,
-          total_surveys_created,
-          total_surveys_completed,
-          surveys:surveys(count),
-          responses:survey_responses(count)
-        `)
-        .eq('id', userId)
-        .single()
-
-      if (error) throw error
-      return {
-        totalEarnings: data.total_earnings || 0,
-        surveysCreated: data.surveys?.[0]?.count || 0,
-        surveysCompleted: data.responses?.[0]?.count || 0
-      }
-    } catch (error) {
-      console.error('Failed to get user stats:', error);
-      return {
-        totalEarnings: 0,
-        surveysCreated: 0,
-        surveysCompleted: 0
-      };
-    }
-  }
-
-  // Real-time subscriptions
-  subscribeTo(table, callback, filters = {}) {
-    let channel = supabase
-      .channel(`${table}-changes`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: table,
-        ...filters
-      }, callback);
-
-    return channel.subscribe();
-  }
-
-  // Utility methods
-  async testConnection() {
-    try {
-      if (!supabase) {
-        throw new Error('Supabase client not initialized');
-      }
-
-      const { data, error } = await supabase
-        .from('users')
-        .select('count')
-        .limit(1);
-      
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  // Mock data fallback for development
-  getMockSurveys() {
-    return [
-      {
-        id: 'mock-1',
-        title: 'Product Feedback Survey',
-        description: 'Help us improve our product with your valuable feedback',
-        category: 'product',
-        reward_amount: 0.5,
-        max_responses: 100,
-        current_responses: 23,
-        estimated_time: 5,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        creator: {
-          display_name: 'TechCorp',
-          wallet_address: '0x1234...5678'
-        },
-        questions: [
-          {
-            question_text: 'How satisfied are you with our product?',
-            question_type: 'rating',
-            required: true
-          }
-        ]
-      },
-      {
-        id: 'mock-2',
-        title: 'Market Research Study',
-        description: 'Share your thoughts on current market trends',
-        category: 'research',
-        reward_amount: 1.0,
-        max_responses: 50,
-        current_responses: 12,
-        estimated_time: 10,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        creator: {
-          display_name: 'ResearchLab',
-          wallet_address: '0x5678...9012'
-        },
-        questions: [
-          {
-            question_text: 'What is your primary concern about the current market?',
-            question_type: 'multiple-choice',
-            options: ['Price volatility', 'Regulation', 'Technology adoption', 'Other'],
-            required: true
-          }
-        ]
-      }
-    ];
-  }
-  async recordSurveyCompletion(surveyId, userId, transactionHash) {
-    try {
-      const { data, error } = await supabase
-        .from('survey_responses')
-        .insert({
-          survey_id: surveyId,
-          user_id: userId,
-          blockchain_tx_hash: transactionHash,
-          completed_at: new Date().toISOString()
-        })
-
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error('Failed to record survey completion:', error);
-      throw error;
-    }
+    return { totalEarnings: 0, surveysCreated: 0, surveysCompleted: 0 };
   }
 }
 
 export const supabaseService = new SupabaseService();
+export const supabase = null;

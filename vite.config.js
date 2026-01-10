@@ -5,11 +5,20 @@ export default defineConfig({
   plugins: [react()],
   define: {
     global: 'globalThis',
+    'process.env': {}
   },
   resolve: {
     alias: {
       '@': '/src',
     },
+  },
+  optimizeDeps: {
+    exclude: ['@supabase/supabase-js']
+  },
+  build: {
+    rollupOptions: {
+      external: ['@supabase/supabase-js']
+    }
   },
   server: {
     proxy: {

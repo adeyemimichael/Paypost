@@ -62,36 +62,87 @@ export const usePostStore = create(
           console.log('⛓️ Loading surveys from blockchain...');
           const surveys = await movementService.getSurveys();
           
-          const transformedSurveys = surveys.map(survey => ({
-            id: survey.id, // Use the actual survey ID from blockchain
-            title: survey.title,
-            description: survey.description,
-            reward: survey.reward_amount,
-            maxResponses: survey.max_responses,
-            responses: survey.current_responses,
-            isActive: survey.isActive,
-            timestamp: Date.now(),
-            author: `${survey.creator.substring(0, 6)}...${survey.creator.substring(62)}`,
-            image: 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800',
-            questions: [{
-              id: 1,
-              type: 'multiple-choice',
-              question: 'How would you rate this survey?',
-              options: ['Excellent', 'Good', 'Fair', 'Poor'],
-              required: true
-            }],
-            type: 'survey',
-            source: 'chain',
-            creatorAddress: survey.creator,
-            actualSurveyId: survey.id // Store the blockchain survey ID
-          }));
+          // Get locally stored posts to preserve questions
+          const { posts: localPosts } = get();
+          const localPostsMap = new Map(localPosts.map(p => [p.title, p]));
+          
+          // Try to get all surveys with questions from Supabase
+          let supabaseSurveys = [];
+          try {
+            if (supabaseService.initialized || (await supabaseService.initialize().catch(() => false))) {
+              supabaseSurveys = await supabaseService.getAllSurveysWithQuestions();
+              console.log(`📊 Loaded ${supabaseSurveys.length} surveys from Supabase for question matching`);
+            }
+          } catch (e) {
+            console.warn('⚠️ Could not load Supabase surveys for questions:', e.message);
+          }
+          
+          // Create a map of Supabase surveys by title for quick lookup
+          const supabaseSurveysByTitle = new Map(supabaseSurveys.map(s => [s.title, s]));
+          
+          const transformedSurveys = surveys.map(survey => {
+            // Try to find matching local survey to get questions
+            const matchingLocalSurvey = localPostsMap.get(survey.title);
+            
+            // Try to find matching Supabase survey to get questions
+            const matchingSupabaseSurvey = supabaseSurveysByTitle.get(survey.title);
+            
+            let questions = [];
+            
+            // Priority 1: Use questions from Supabase (most reliable)
+            if (matchingSupabaseSurvey?.questions && Array.isArray(matchingSupabaseSurvey.questions) && matchingSupabaseSurvey.questions.length > 0) {
+              questions = matchingSupabaseSurvey.questions.map(q => ({
+                id: q.id,
+                type: q.question_type || 'multiple-choice',
+                question: q.question_text,
+                options: q.options || [],
+                required: q.is_required !== false,
+                max: q.max_rating || 5
+              }));
+              console.log(`📝 Using Supabase questions for "${survey.title}" (${questions.length} questions)`);
+            }
+            // Priority 2: Use questions from local storage
+            else if (matchingLocalSurvey?.questions && Array.isArray(matchingLocalSurvey.questions) && matchingLocalSurvey.questions.length > 0) {
+              questions = matchingLocalSurvey.questions;
+              console.log(`📝 Using locally stored questions for "${survey.title}"`);
+            }
+            
+            // Fallback to default question if none found
+            if (questions.length === 0) {
+              questions = [{
+                id: 1,
+                type: 'multiple-choice',
+                question: 'How would you rate this survey?',
+                options: ['Excellent', 'Good', 'Fair', 'Poor'],
+                required: true
+              }];
+              console.log(`⚠️ No questions found for "${survey.title}", using default`);
+            }
+            
+            return {
+              id: survey.id, // Use the actual survey ID from blockchain
+              title: survey.title,
+              description: survey.description,
+              reward: survey.reward_amount,
+              maxResponses: survey.max_responses,
+              responses: survey.current_responses,
+              isActive: survey.isActive,
+              timestamp: Date.now(),
+              author: `${survey.creator.substring(0, 6)}...${survey.creator.substring(62)}`,
+              image: 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800',
+              questions,
+              type: 'survey',
+              source: 'chain',
+              creatorAddress: survey.creator,
+              actualSurveyId: survey.id // Store the blockchain survey ID
+            };
+          });
 
           set({ posts: transformedSurveys });
           console.log(`✅ Loaded ${transformedSurveys.length} surveys from blockchain`);
         } catch (error) {
           console.error('❌ Failed to load surveys from chain:', error);
-          await supabaseService.initialize();
-          await get().loadSurveysFromSupabase();
+          // Keep existing posts if chain load fails
         }
       },
 
@@ -265,14 +316,24 @@ export const usePostStore = create(
           const blockchainResult = await movementService.createSurvey(surveyData, wallet);
           console.log('✅ Survey created successfully:', blockchainResult.transactionHash);
 
-          // Save to Supabase
+          // Save to Supabase with questions
           try {
             const survey = await supabaseService.createSurvey({
               ...surveyData,
               creatorId: user.id,
               blockchain_tx_hash: blockchainResult.transactionHash
             });
-            console.log('✅ Survey saved to Supabase:', survey.id);
+            console.log('✅ Survey saved to Supabase:', survey?.id);
+            
+            // Save questions to Supabase if survey was created
+            if (survey?.id && surveyData.questions && surveyData.questions.length > 0) {
+              try {
+                await supabaseService.createSurveyQuestions(survey.id, surveyData.questions);
+                console.log('✅ Survey questions saved to Supabase');
+              } catch (questionsError) {
+                console.warn('⚠️ Failed to save questions to Supabase:', questionsError);
+              }
+            }
           } catch (dbError) {
             console.warn('⚠️ Failed to save to Supabase, but blockchain transaction succeeded:', dbError);
           }
@@ -288,13 +349,21 @@ export const usePostStore = create(
             timestamp: Date.now(),
             author: `${wallet.address.substring(0, 6)}...${wallet.address.substring(62)}`,
             image: 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800',
-            questions: surveyData.questions || [{
-              id: 1,
-              type: 'multiple-choice',
-              question: 'How would you rate this survey?',
-              options: ['Excellent', 'Good', 'Fair', 'Poor'],
-              required: true
-            }],
+            questions: surveyData.questions && surveyData.questions.length > 0 
+              ? surveyData.questions.map((q, idx) => ({
+                  id: q.id || idx + 1,
+                  type: q.type || 'multiple-choice',
+                  question: q.text || q.question,
+                  options: q.options || [],
+                  required: q.required !== false
+                }))
+              : [{
+                  id: 1,
+                  type: 'multiple-choice',
+                  question: 'How would you rate this survey?',
+                  options: ['Excellent', 'Good', 'Fair', 'Poor'],
+                  required: true
+                }],
             type: 'survey',
             source: 'chain',
             blockchain_tx_hash: blockchainResult.transactionHash
@@ -427,13 +496,6 @@ export const usePostStore = create(
             // Don't throw - blockchain operation succeeded
           }
 
-          await supabaseService.saveResponse(
-            surveyId,
-            user.id,
-            responseData || {},
-            blockchainResult.transactionHash || blockchainResult.hash
-          );
-
           set(state => ({
             posts: state.posts.map(post => 
               post.id === surveyId 
@@ -563,6 +625,7 @@ export const usePostStore = create(
     {
       name: 'paypost-post-store',
       partialize: (state) => ({
+        posts: state.posts, // Store posts with questions locally
         completedSurveys: Array.from(state.completedSurveys),
         unlockedPosts: Array.from(state.unlockedPosts),
         userEarnings: state.userEarnings
