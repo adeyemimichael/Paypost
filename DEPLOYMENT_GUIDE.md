@@ -1,4 +1,4 @@
-# ContentPlatform Smart Contract Deployment Guide
+# PayPost Smart Contract Deployment Guide
 
 ## Prerequisites
 
@@ -11,12 +11,11 @@
    ```bash
    aptos init --network custom --rest-url https://testnet.movementnetwork.xyz/v1
    ```
-   This will create a `.aptos/config.yaml` file with your private key.
 
 3. **Fund Deployer Account**
-   - Copy your address from the config file
+   - Copy your address from `.aptos/config.yaml`
    - Visit: https://faucet.testnet.movementnetwork.xyz/
-   - Request testnet MOVE tokens (you'll need at least 1 MOVE for deployment)
+   - Request testnet MOVE tokens (minimum 1 MOVE for deployment)
 
 ## Deployment Steps
 
@@ -27,92 +26,226 @@
 
 ### 2. Deploy to Movement Testnet
 ```bash
-# Get your private key from .aptos/config.yaml
-export DEPLOYER_PRIVATE_KEY="your_private_key_here"
-
-# Deploy the contract
+export DEPLOYER_PRIVATE_KEY="your_private_key_from_config"
 node deploy.js
 ```
 
 ### 3. Update Environment Variables
-After successful deployment, update both `.env` files:
 
 **Frontend (.env):**
 ```env
+VITE_PRIVY_APP_ID=cmjdd0qln00l0jr0cyua66s7y
+VITE_MOVEMENT_RPC_URL=https://testnet.movementnetwork.xyz/v1
+VITE_MOVEMENT_CHAIN_ID=250
 VITE_CONTRACT_ADDRESS=your_deployed_contract_address
+VITE_API_BASE_URL=https://backend-phi-rosy-67.vercel.app/api
+VITE_SUPABASE_URL=https://atiewnrbnfzqrgktkcur.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0aWV3bnJibmZ6cXJna3RrY3VyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ5NzI5NzQsImV4cCI6MjA1MDU0ODk3NH0.5i37PEmczSVeZ1c2AawAoA_tTfkG0CF
 ```
 
 **Backend (backend/.env):**
 ```env
+PRIVY_APP_ID=cmjdd0qln00l0jr0cyua66s7y
+PRIVY_APP_SECRET=your_privy_app_secret
+MOVEMENT_RPC_URL=https://testnet.movementnetwork.xyz/v1
 CONTRACT_ADDRESS=your_deployed_contract_address
 ```
 
-### 4. Restart Services
+### 4. Deploy Frontend to Vercel
 ```bash
-# Restart backend
-cd backend && npm start
+./deploy-vercel.sh
+```
 
-# Restart frontend (in another terminal)
-npm run dev
+### 5. Deploy Backend to Vercel
+```bash
+cd backend
+vercel --prod
+```
+
+## Database Setup (Supabase)
+
+### Required Tables
+
+**users table:**
+```sql
+CREATE TABLE users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  wallet_address TEXT UNIQUE NOT NULL,
+  email TEXT,
+  role TEXT DEFAULT 'reader',
+  display_name TEXT,
+  total_earnings DECIMAL DEFAULT 0,
+  total_surveys_created INTEGER DEFAULT 0,
+  total_surveys_completed INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**surveys table:**
+```sql
+CREATE TABLE surveys (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  category TEXT DEFAULT 'general',
+  reward_amount DECIMAL NOT NULL,
+  max_responses INTEGER NOT NULL,
+  current_responses INTEGER DEFAULT 0,
+  estimated_time INTEGER DEFAULT 5,
+  expires_at TIMESTAMP,
+  creator_id UUID REFERENCES users(id),
+  blockchain_tx_hash TEXT,
+  blockchain_status TEXT DEFAULT 'confirmed',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**survey_questions table:**
+```sql
+CREATE TABLE survey_questions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  survey_id UUID REFERENCES surveys(id) ON DELETE CASCADE,
+  question_text TEXT NOT NULL,
+  question_type TEXT NOT NULL,
+  options JSONB,
+  required BOOLEAN DEFAULT true,
+  order_index INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**survey_responses table:**
+```sql
+CREATE TABLE survey_responses (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  survey_id UUID REFERENCES surveys(id),
+  participant_id UUID REFERENCES users(id),
+  response_data JSONB,
+  blockchain_tx_hash TEXT,
+  completed_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### RLS Policies
+```sql
+-- Enable RLS
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE surveys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE survey_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE survey_responses ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access
+CREATE POLICY "Public read access" ON users FOR SELECT USING (true);
+CREATE POLICY "Public read access" ON surveys FOR SELECT USING (true);
+CREATE POLICY "Public read access" ON survey_questions FOR SELECT USING (true);
+CREATE POLICY "Public read access" ON survey_responses FOR SELECT USING (true);
+
+-- Allow public insert/update
+CREATE POLICY "Public insert access" ON users FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public insert access" ON surveys FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public insert access" ON survey_questions FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public insert access" ON survey_responses FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Public update access" ON users FOR UPDATE USING (true);
+CREATE POLICY "Public update access" ON surveys FOR UPDATE USING (true);
 ```
 
 ## Verification
 
-1. **Check Contract on Explorer**
+1. **Contract Verification**
    - Visit: https://explorer.testnet.movementnetwork.xyz/
    - Search for your contract address
-   - Verify the ContentPlatform module is deployed
+   - Verify PayPost module is deployed
 
-2. **Test Survey Creation**
-   - Create a survey in the app
-   - Check that MOVE tokens are deducted from your balance
-   - Verify transaction appears on the explorer
+2. **Frontend Testing**
+   - Create account with email
+   - Select role (creator/participant)
+   - Create survey (creators)
+   - Complete survey (participants)
+   - Check wallet balance updates
+
+3. **Database Verification**
+   - Check users table for new registrations
+   - Verify surveys are saved with blockchain hashes
+   - Confirm responses are recorded
+
+## Production Deployment
+
+### Environment Variables for Production
+
+**Vercel Environment Variables:**
+```
+VITE_PRIVY_APP_ID=cmjdd0qln00l0jr0cyua66s7y
+VITE_MOVEMENT_RPC_URL=https://testnet.movementnetwork.xyz/v1
+VITE_MOVEMENT_CHAIN_ID=250
+VITE_CONTRACT_ADDRESS=your_deployed_contract_address
+VITE_API_BASE_URL=https://your-backend-domain.vercel.app/api
+VITE_SUPABASE_URL=https://atiewnrbnfzqrgktkcur.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### Backend Environment Variables:
+```
+PRIVY_APP_ID=cmjdd0qln00l0jr0cyua66s7y
+PRIVY_APP_SECRET=your_privy_app_secret
+MOVEMENT_RPC_URL=https://testnet.movementnetwork.xyz/v1
+CONTRACT_ADDRESS=your_deployed_contract_address
+```
 
 ## Troubleshooting
 
-### Build Errors
-- Ensure Aptos CLI is installed and updated
-- Check Move.toml syntax
-- Verify all dependencies are correct
+### Common Issues
 
-### Deployment Errors
-- **Insufficient Balance**: Fund your deployer account with more MOVE tokens
-- **Network Issues**: Check Movement testnet status
-- **Module Exists**: Use a different deployer address
+1. **Supabase Connection Errors**
+   - Verify VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+   - Check RLS policies are set correctly
+   - Ensure tables exist with correct schema
 
-### Transaction Errors
-- **Module Not Found**: Contract not deployed or wrong address
-- **Insufficient Balance**: User needs more MOVE tokens
-- **Invalid Arguments**: Check function parameters
+2. **Survey Creation Fails**
+   - Check user has sufficient MOVE tokens
+   - Verify contract address is correct
+   - Ensure user is authenticated with Privy
 
-## Contract Functions
+3. **Survey Completion Errors**
+   - User may have already completed survey
+   - Check survey is still active
+   - Verify blockchain transaction succeeds
 
-### For Creators
-- `create_and_fund_survey()` - Creates survey and locks tokens
-- Automatically deducts: `reward_amount * max_responses` MOVE tokens
+4. **Wallet Persistence Issues**
+   - Clear localStorage: `localStorage.clear()`
+   - Re-authenticate with Privy
+   - Check wallet initialization logs
 
-### For Participants  
-- `complete_survey()` - Completes survey and receives reward
-- Automatically transfers reward to participant
+### Debug Commands
+```bash
+# Check contract deployment
+aptos account list --account your_contract_address
 
-### View Functions
-- `get_survey()` - Get survey details
-- `get_all_surveys()` - Get all surveys
-- `get_user_earnings()` - Get user's total earnings
-- `has_completed_survey()` - Check if user completed survey
+# Test backend connection
+curl https://your-backend-domain.vercel.app/api/health
 
-## Security Features
+# Check Supabase connection
+# Run in browser console:
+# supabase.from('users').select('count')
+```
 
-- ✅ **Automatic Fund Locking**: Tokens locked when survey created
-- ✅ **Duplicate Prevention**: Users can't complete same survey twice  
-- ✅ **Expiration Handling**: Surveys automatically expire
-- ✅ **Balance Verification**: Checks sufficient funds before creation
-- ✅ **Event Emission**: All actions logged on-chain
+## Security Considerations
 
-## Next Steps
+- ✅ Wallet addresses stored securely
+- ✅ User data encrypted in Supabase
+- ✅ Blockchain transactions verified
+- ✅ Role-based access control
+- ✅ Survey completion tracking
+- ✅ Duplicate prevention mechanisms
 
-After deployment:
-1. Test survey creation with small amounts
-2. Verify token deduction and rewards work
-3. Check all transactions on Movement explorer
-4. Monitor contract for any issues
+## Support
+
+For deployment issues:
+1. Check logs in Vercel dashboard
+2. Verify environment variables
+3. Test contract functions manually
+4. Check Supabase table structure
+5. Monitor blockchain transactions

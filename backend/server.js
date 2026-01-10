@@ -37,8 +37,42 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Simple in-memory user-wallet mapping (in production, use a database)
+// Enhanced in-memory user-wallet mapping with user data (in production, use a database)
 const userWalletMapping = new Map();
+const userDataStore = new Map(); // Store user profile data
+
+// Helper function to store user data
+function storeUserData(userId, walletAddress, email = null, role = 'reader') {
+  const userData = {
+    userId,
+    walletAddress,
+    email,
+    role,
+    createdAt: new Date().toISOString(),
+    lastLogin: new Date().toISOString()
+  };
+  
+  userDataStore.set(userId, userData);
+  console.log('💾 Stored user data:', { userId, walletAddress, email, role });
+  return userData;
+}
+
+// Helper function to get user data
+function getUserData(userId) {
+  return userDataStore.get(userId) || null;
+}
+
+// Helper function to update user data
+function updateUserData(userId, updates) {
+  const currentData = userDataStore.get(userId) || {};
+  const updatedData = {
+    ...currentData,
+    ...updates,
+    lastUpdated: new Date().toISOString()
+  };
+  userDataStore.set(userId, updatedData);
+  return updatedData;
+}
 
 // Helper function to find wallet by user ID from Privy API
 async function findUserWalletFromPrivy(userId) {
@@ -85,13 +119,13 @@ async function findUserWalletFromPrivy(userId) {
 // Wallet management endpoints
 app.post('/api/wallets/create-aptos', async (req, res) => {
   try {
-    const { userId } = req.body;
+    const { userId, userEmail, userRole } = req.body;
     
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
     }
 
-    console.log('Creating Aptos wallet for user:', userId);
+    console.log('🔧 Creating Aptos wallet for user:', userId, { email: !!userEmail, role: userRole });
 
     // Check if user already has a wallet in our mapping
     if (userWalletMapping.has(userId)) {
@@ -102,6 +136,12 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
         const existingWallet = await privy.wallets().get(existingWalletId);
         if (existingWallet && existingWallet.chain_type === 'aptos') {
           console.log('✅ Returning existing wallet:', existingWallet.address);
+          
+          // Update user data if provided
+          if (userEmail || userRole) {
+            storeUserData(userId, existingWallet.address, userEmail, userRole);
+          }
+          
           return res.status(409).json({ 
             error: 'User already has an Aptos wallet',
             code: 'WALLET_EXISTS',
@@ -110,12 +150,13 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
               address: existingWallet.address,
               chainType: existingWallet.chain_type,
               publicKey: existingWallet.public_key,
-              createdAt: existingWallet.created_at
+              createdAt: existingWallet.created_at,
+              userData: getUserData(userId)
             }
           });
         }
       } catch (walletError) {
-        console.log('Existing wallet not found, removing from mapping');
+        console.log('⚠️ Existing wallet not found, removing from mapping');
         userWalletMapping.delete(userId);
       }
     }
@@ -125,11 +166,13 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
       chain_type: 'aptos'
     });
 
-    console.log('Aptos wallet created:', wallet);
+    console.log('✅ Aptos wallet created:', wallet.address);
 
-    // Store the mapping
+    // Store the mapping and user data
     userWalletMapping.set(userId, wallet.id);
-    console.log('✅ Wallet mapped to user:', userId, '->', wallet.id);
+    const userData = storeUserData(userId, wallet.address, userEmail, userRole);
+    
+    console.log('✅ Wallet and user data mapped:', userId, '->', wallet.id);
 
     res.json({
       success: true,
@@ -138,12 +181,13 @@ app.post('/api/wallets/create-aptos', async (req, res) => {
         address: wallet.address,
         chainType: wallet.chain_type,
         publicKey: wallet.public_key,
-        createdAt: wallet.created_at
+        createdAt: wallet.created_at,
+        userData
       }
     });
 
   } catch (error) {
-    console.error('Failed to create Aptos wallet:', error);
+    console.error('❌ Failed to create Aptos wallet:', error);
     
     res.status(500).json({ 
       error: 'Failed to create Aptos wallet',
@@ -254,6 +298,54 @@ app.get('/api/wallets/:walletId/complete', async (req, res) => {
     console.error('Failed to get complete wallet info:', error);
     res.status(500).json({ 
       error: 'Failed to get complete wallet info',
+      details: error.message 
+    });
+  }
+});
+
+// Get user data
+app.get('/api/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const userData = getUserData(userId);
+    
+    if (!userData) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      success: true,
+      user: userData
+    });
+  } catch (error) {
+    console.error('Failed to get user data:', error);
+    res.status(500).json({ 
+      error: 'Failed to get user data',
+      details: error.message 
+    });
+  }
+});
+
+// Update user data
+app.put('/api/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { email, role, displayName } = req.body;
+    
+    const updatedData = updateUserData(userId, {
+      email,
+      role,
+      displayName
+    });
+    
+    res.json({
+      success: true,
+      user: updatedData
+    });
+  } catch (error) {
+    console.error('Failed to update user data:', error);
+    res.status(500).json({ 
+      error: 'Failed to update user data',
       details: error.message 
     });
   }

@@ -40,18 +40,62 @@ const AppContent = () => {
     }
   }, [ready, loadUserRole, initializePostStore]);
 
-  // Initialize wallet when user authenticates
+  // Initialize wallet and refresh post store when user authenticates
   useEffect(() => {
     if (authenticated && ready && user?.id) {
-      console.log('User authenticated, initializing wallet...');
-      initializeWallet(user.id);
+      console.log('🔄 User authenticated, initializing wallet...');
+      
+      // Check for pending role selection
+      const pendingRole = localStorage.getItem('paypost_pending_role');
+      const userEmail = user.email?.address;
+      
+      console.log('📋 User authentication data:', {
+        userId: user.id,
+        email: !!userEmail,
+        pendingRole,
+        currentRole: userRole
+      });
+      
+      // Initialize wallet with user data
+      initializeWallet(user.id, userEmail, pendingRole || userRole).then((wallet) => {
+        if (wallet?.address) {
+          console.log('✅ Wallet initialized, refreshing post store');
+          // Reinitialize post store with user address
+          initializePostStore(wallet.address);
+        }
+        
+        // Handle pending role after wallet initialization
+        if (pendingRole && !userRole) {
+          console.log('🔄 Setting pending role:', pendingRole);
+          setUserRole(pendingRole);
+          localStorage.removeItem('paypost_pending_role');
+          localStorage.removeItem('paypost_role_selection_timestamp');
+        }
+      }).catch(error => {
+        console.error('❌ Failed to initialize wallet:', error);
+      });
     }
-  }, [authenticated, ready, user?.id, initializeWallet]);
+  }, [authenticated, ready, user?.id, user?.email?.address, initializeWallet, initializePostStore, userRole, setUserRole]);
 
   // Handle role selection flow
   useEffect(() => {
-    // If user is authenticated but has no role, show role selection
-    if (authenticated && !userRole && !pendingLogin) {
+    // Check for pending role first
+    const pendingRole = localStorage.getItem('paypost_pending_role');
+    const roleTimestamp = localStorage.getItem('paypost_role_selection_timestamp');
+    
+    // Clear old pending roles (older than 1 hour)
+    if (roleTimestamp) {
+      const timestamp = new Date(roleTimestamp);
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      if (timestamp < hourAgo) {
+        localStorage.removeItem('paypost_pending_role');
+        localStorage.removeItem('paypost_role_selection_timestamp');
+      }
+    }
+    
+    // Show role modal if user is authenticated but has no role and no pending role
+    if (authenticated && !userRole && !pendingRole && !pendingLogin) {
+      console.log('🔄 Showing role selection modal');
       setShowRoleModal(true);
     } else {
       setShowRoleModal(false);
@@ -59,29 +103,38 @@ const AppContent = () => {
   }, [authenticated, userRole, pendingLogin]);
 
   const handleRoleSelection = (selectedRole) => {
+    console.log('🔄 Handling role selection:', selectedRole);
     setUserRole(selectedRole);
     setShowRoleModal(false);
     setPendingLogin(false);
+    
+    // Clear any pending role data
+    localStorage.removeItem('paypost_pending_role');
+    localStorage.removeItem('paypost_role_selection_timestamp');
   };
 
   const handlePreLoginRoleSelection = (selectedRole) => {
+    console.log('🔄 Handling pre-login role selection:', selectedRole);
     // Store the selected role temporarily
     localStorage.setItem('paypost_pending_role', selectedRole);
+    localStorage.setItem('paypost_role_selection_timestamp', new Date().toISOString());
     setPendingLogin(true);
     setShowRoleModal(false);
   };
 
-  // Check for pending role after login
+  // Check for pending role after login (backup mechanism)
   useEffect(() => {
     if (authenticated && pendingLogin) {
       const pendingRole = localStorage.getItem('paypost_pending_role');
-      if (pendingRole) {
+      if (pendingRole && !userRole) {
+        console.log('🔄 Processing pending role after login:', pendingRole);
         setUserRole(pendingRole);
         localStorage.removeItem('paypost_pending_role');
+        localStorage.removeItem('paypost_role_selection_timestamp');
       }
       setPendingLogin(false);
     }
-  }, [authenticated, pendingLogin, setUserRole]);
+  }, [authenticated, pendingLogin, setUserRole, userRole]);
 
   if (!ready) {
     return (

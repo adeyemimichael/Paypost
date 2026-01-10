@@ -3,13 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePrivy } from '@privy-io/react-auth';
 import { X, Users, PenTool, ArrowRight, CheckCircle } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
+import { useMovementWallet } from '../hooks/useMovementWallet';
 import { scaleIn } from '../animations/fadeIn';
 import Button from './Button';
 
 const RoleSelectionModal = ({ isOpen, onClose, onRoleSelect }) => {
   const { setUserRole, isLoading } = useUserStore();
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, user } = usePrivy();
+  const { updateUserData } = useMovementWallet();
   const [selectedRole, setSelectedRole] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const roles = [
     {
@@ -47,19 +50,40 @@ const RoleSelectionModal = ({ isOpen, onClose, onRoleSelect }) => {
   const handleContinue = async () => {
     if (!selectedRole) return;
     
-    if (authenticated) {
-      // User is already logged in, just set the role
-      onRoleSelect(selectedRole);
-    } else {
-      // User needs to login first, then we'll set the role
-      try {
-        // Store role selection and trigger login
+    setIsProcessing(true);
+    
+    try {
+      if (authenticated && user?.id) {
+        // User is already logged in, persist the role selection
+        console.log('🔄 Persisting role selection:', selectedRole);
+        
+        // Update user data in wallet store and localStorage
+        updateUserData({
+          role: selectedRole,
+          email: user.email?.address,
+          roleSelectedAt: new Date().toISOString()
+        });
+        
+        // Set role in user store
+        await setUserRole(selectedRole);
+        
+        // Call the callback
+        onRoleSelect(selectedRole);
+        
+        console.log('✅ Role selection persisted successfully');
+      } else {
+        // User needs to login first, store role for after login
+        console.log('🔄 Storing role for post-login:', selectedRole);
         localStorage.setItem('paypost_pending_role', selectedRole);
+        localStorage.setItem('paypost_role_selection_timestamp', new Date().toISOString());
+        
         await login();
         // The App component will handle setting the role after login
-      } catch (error) {
-        console.error('Login failed:', error);
       }
+    } catch (error) {
+      console.error('❌ Failed to handle role selection:', error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -172,8 +196,8 @@ const RoleSelectionModal = ({ isOpen, onClose, onRoleSelect }) => {
               
               <Button
                 onClick={handleContinue}
-                disabled={!selectedRole || isLoading}
-                loading={isLoading}
+                disabled={!selectedRole || isLoading || isProcessing}
+                loading={isLoading || isProcessing}
                 className="px-8"
               >
                 {authenticated ? 'Continue' : 'Login'} as {selectedRole === 'creator' ? 'Creator' : 'Participant'}

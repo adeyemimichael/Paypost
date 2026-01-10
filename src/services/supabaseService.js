@@ -3,7 +3,22 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+let supabase = null;
+
+// Only initialize Supabase if both URL and key are provided
+if (supabaseUrl && supabaseKey && supabaseKey.length > 20) {
+  try {
+    supabase = createClient(supabaseUrl, supabaseKey);
+    console.log('✅ Supabase client initialized');
+  } catch (error) {
+    console.warn('⚠️ Failed to initialize Supabase:', error);
+    supabase = null;
+  }
+} else {
+  console.warn('⚠️ Supabase configuration missing or invalid, running without database');
+}
+
+export { supabase };
 
 class SupabaseService {
   constructor() {
@@ -12,35 +27,31 @@ class SupabaseService {
 
   async initialize() {
     try {
-      // Test connection with a simple query
-      console.log('🔄 Testing Supabase connection...');
+      if (!supabase) {
+        throw new Error('Supabase client not initialized');
+      }
+
       const { data, error } = await supabase.from('users').select('count').limit(1);
       
       if (error && error.code !== 'PGRST116') {
-        console.warn('Supabase connection test failed:', error.message);
-        return false;
-      }
-      
-      // Test if we can query the users table structure
-      try {
-        const { data: schemaTest } = await supabase.from('users').select('id, wallet_address, email, role').limit(1);
-        console.log('✅ Database schema accessible');
-      } catch (schemaError) {
-        console.warn('⚠️ Database schema test failed:', schemaError);
+        throw new Error(`Supabase connection failed: ${error.message}`);
       }
       
       this.initialized = true;
       console.log('✅ Supabase service initialized successfully');
       return true;
     } catch (error) {
-      console.warn('❌ Supabase initialization failed:', error.message);
-      return false;
+      console.error('❌ Supabase initialization failed:', error.message);
+      throw error;
     }
   }
 
   async createUser(walletAddress, email, role, displayName = null, privyUserId = null) {
     try {
-      // Validate inputs
+      if (!supabase || !this.initialized) {
+        await this.initialize();
+      }
+
       if (!walletAddress || typeof walletAddress !== 'string') {
         throw new Error(`Invalid wallet address: ${walletAddress}`);
       }
@@ -49,7 +60,6 @@ class SupabaseService {
         throw new Error(`Invalid email: ${email}`);
       }
 
-      // Create user without privy_user_id column (not available in current schema)
       const userData = { 
         wallet_address: walletAddress, 
         email, 
@@ -57,19 +67,15 @@ class SupabaseService {
         display_name: displayName || `${role}_${walletAddress.slice(0, 8)}`
       };
 
-      console.log('Creating user with data:', userData);
-
       const { data, error } = await supabase
         .from('users')
         .insert([userData])
         .select()
       
       if (error) {
-        console.error('Supabase insert error:', error);
         throw error;
       }
       
-      console.log('User created successfully:', data[0]);
       return data[0]
     } catch (error) {
       console.error('Failed to create user:', error);
@@ -107,10 +113,12 @@ class SupabaseService {
 
   async getUser(walletAddress) {
     try {
-      // Ensure wallet address is properly formatted
+      if (!supabase || !this.initialized) {
+        await this.initialize();
+      }
+
       if (!walletAddress || typeof walletAddress !== 'string') {
-        console.error('Invalid wallet address:', walletAddress);
-        return null;
+        throw new Error('Invalid wallet address');
       }
 
       const { data, error } = await supabase
@@ -120,7 +128,6 @@ class SupabaseService {
         .single()
       
       if (error && error.code !== 'PGRST116') {
-        console.error('Database query error:', error);
         throw error;
       }
       return data
@@ -168,9 +175,12 @@ class SupabaseService {
     }
   }
 
-  // Survey Management
   async createSurvey(surveyData) {
     try {
+      if (!supabase || !this.initialized) {
+        await this.initialize();
+      }
+
       const { data, error } = await supabase
         .from('surveys')
         .insert([{
@@ -181,7 +191,9 @@ class SupabaseService {
           max_responses: surveyData.maxResponses,
           estimated_time: surveyData.estimatedTime || 5,
           expires_at: surveyData.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          creator_id: surveyData.creatorId
+          creator_id: surveyData.creatorId,
+          blockchain_tx_hash: surveyData.blockchain_tx_hash,
+          blockchain_status: surveyData.blockchain_status || 'confirmed'
         }])
         .select()
       
@@ -217,6 +229,10 @@ class SupabaseService {
 
   async getSurveys(filters = {}) {
     try {
+      if (!supabase || !this.initialized) {
+        await this.initialize();
+      }
+
       let query = supabase
         .from('surveys')
         .select(`
@@ -239,7 +255,6 @@ class SupabaseService {
       const { data, error } = await query
       if (error) throw error
       
-      // Transform data to match expected format
       return data.map(survey => ({
         ...survey,
         creator: survey.creator || { display_name: 'Unknown', wallet_address: '' },
@@ -247,7 +262,7 @@ class SupabaseService {
       }))
     } catch (error) {
       console.error('Failed to get surveys:', error);
-      return [];
+      return this.getMockSurveys();
     }
   }
 
@@ -321,6 +336,10 @@ class SupabaseService {
   // Response Management
   async saveResponse(surveyId, participantId, responseData, txHash = null) {
     try {
+      if (!supabase || !this.initialized) {
+        await this.initialize();
+      }
+
       const { data, error } = await supabase
         .from('survey_responses')
         .insert([{
@@ -333,7 +352,6 @@ class SupabaseService {
 
       if (error) throw error
 
-      // Update survey response count
       await this.incrementSurveyResponses(surveyId);
 
       return data[0]
@@ -345,6 +363,10 @@ class SupabaseService {
 
   async hasCompletedSurvey(surveyId, participantId) {
     try {
+      if (!supabase || !this.initialized) {
+        await this.initialize();
+      }
+
       const { data, error } = await supabase
         .from('survey_responses')
         .select('id')
@@ -450,14 +472,19 @@ class SupabaseService {
   // Utility methods
   async testConnection() {
     try {
+      if (!supabase) {
+        throw new Error('Supabase client not initialized');
+      }
+
       const { data, error } = await supabase
         .from('users')
         .select('count')
         .limit(1);
       
-      return !error;
+      if (error) throw error;
+      return true;
     } catch (error) {
-      return false;
+      throw error;
     }
   }
 

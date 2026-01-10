@@ -97,61 +97,97 @@ class WalletService {
   }
 
   // Ensure user has exactly one Aptos wallet (persistent across sessions)
-  async ensureAptosWallet(userId) {
+  async ensureAptosWallet(userId, userEmail = null, userRole = null) {
     try {
-      console.log('Ensuring persistent Aptos wallet for user:', userId);
+      console.log('🔄 Ensuring persistent Aptos wallet for user:', userId);
+      
+      // Prevent concurrent wallet creation for same user
+      if (this.creationLocks.has(userId)) {
+        console.log('⏳ Wallet creation already in progress for user:', userId);
+        await this.creationLocks.get(userId);
+      }
+
+      // Check cache first for performance
+      if (this.walletCache.has(userId)) {
+        const cachedWallet = this.walletCache.get(userId);
+        console.log('✅ Using cached wallet:', cachedWallet.address);
+        return cachedWallet;
+      }
       
       // ALWAYS check backend first for existing wallet
       let aptosWallet = await this.getUserAptosWallet(userId);
       
       if (aptosWallet) {
         console.log('✅ Found existing Aptos wallet:', aptosWallet.address);
+        
+        // Ensure user data is persisted in database if provided
+        if (userEmail || userRole) {
+          await this.ensureUserDataPersistence(userId, aptosWallet.address, userEmail, userRole);
+        }
+        
         // Store in localStorage for faster future access
         const storageKey = `paypost_wallet_${userId}`;
         localStorage.setItem(storageKey, JSON.stringify(aptosWallet));
         return aptosWallet;
       }
       
-      // Check localStorage as secondary option (but verify with backend)
-      const storageKey = `paypost_wallet_${userId}`;
-      const storedWallet = localStorage.getItem(storageKey);
+      // Create lock to prevent concurrent creation
+      const creationPromise = this.createWalletWithUserData(userId, userEmail, userRole);
+      this.creationLocks.set(userId, creationPromise);
       
-      if (storedWallet) {
-        try {
-          const wallet = JSON.parse(storedWallet);
-          console.log('Found stored wallet, verifying with backend:', wallet.address);
-          
-          // Verify this wallet still exists in backend
-          const backendWallets = await this.getUserWallets(userId);
-          const matchingWallet = backendWallets.find(w => w.address === wallet.address);
-          
-          if (matchingWallet) {
-            console.log('✅ Verified stored wallet exists in backend');
-            this.walletCache.set(userId, matchingWallet);
-            return matchingWallet;
-          } else {
-            console.log('⚠️ Stored wallet not found in backend, removing from storage');
-            localStorage.removeItem(storageKey);
-          }
-        } catch (error) {
-          console.error('Failed to parse stored wallet, removing:', error);
-          localStorage.removeItem(storageKey);
-        }
+      try {
+        const result = await creationPromise;
+        return result;
+      } finally {
+        this.creationLocks.delete(userId);
       }
       
-      // Only create new wallet if absolutely none exists
-      console.log('Creating new Aptos wallet for user:', userId);
+    } catch (error) {
+      console.error('❌ Failed to ensure Aptos wallet:', error);
+      this.creationLocks.delete(userId);
+      throw error;
+    }
+  }
+
+  // Create wallet and persist user data
+  async createWalletWithUserData(userId, userEmail, userRole) {
+    try {
+      console.log('🔧 Creating new Aptos wallet with user data for:', userId);
+      
+      // Create the wallet first
       const result = await this.createAptosWallet(userId);
       
+      // Persist user data in database if available
+      if (userEmail || userRole) {
+        await this.ensureUserDataPersistence(userId, result.wallet.address, userEmail, userRole);
+      }
+      
       // Store the new wallet in localStorage
+      const storageKey = `paypost_wallet_${userId}`;
       localStorage.setItem(storageKey, JSON.stringify(result.wallet));
       
-      console.log('✅ New Aptos wallet created:', result.wallet.address);
+      console.log('✅ New Aptos wallet created with user data:', result.wallet.address);
       return result.wallet;
       
     } catch (error) {
-      console.error('Failed to ensure Aptos wallet:', error);
+      console.error('❌ Failed to create wallet with user data:', error);
       throw error;
+    }
+  }
+
+  async ensureUserDataPersistence(userId, walletAddress, email, role) {
+    try {
+      const { supabaseService } = await import('./supabaseService.js');
+      
+      if (!supabaseService.initialized) {
+        await supabaseService.initialize();
+      }
+      
+      if (supabaseService.initialized) {
+        await supabaseService.getOrCreateUser(walletAddress, email, role, userId);
+      }
+    } catch (error) {
+      console.error('Failed to persist user data:', error);
     }
   }
 
