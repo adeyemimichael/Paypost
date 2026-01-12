@@ -25,22 +25,41 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
 
   // Check if already completed using the postStore method
   const [alreadyCompleted, setAlreadyCompleted] = useState(false);
+  const [isCheckingCompletion, setIsCheckingCompletion] = useState(true);
+  
+  // Reset state when post changes or modal opens
+  useEffect(() => {
+    if (isOpen && post) {
+      setCurrentStep(0);
+      setResponses({});
+      setIsCompleted(false);
+      setAlreadyCompleted(false);
+      setIsCheckingCompletion(true);
+    }
+  }, [isOpen, post?.id]);
   
   useEffect(() => {
     const checkCompletion = async () => {
-      if (post && wallet?.address) {
+      if (post && wallet?.address && isOpen) {
+        setIsCheckingCompletion(true);
         try {
+          console.log('🔍 Checking completion for survey:', post.id, 'wallet:', wallet.address);
           const completed = await hasUserCompletedSurvey(post.id, wallet.address);
+          console.log('🔍 Completion result:', completed, 'for survey:', post.id);
           setAlreadyCompleted(completed);
         } catch (error) {
           console.error('Failed to check survey completion:', error);
           // Don't block the user if we can't check completion status
           setAlreadyCompleted(false);
+        } finally {
+          setIsCheckingCompletion(false);
         }
+      } else {
+        setIsCheckingCompletion(false);
       }
     };
     checkCompletion();
-  }, [post, wallet?.address, hasUserCompletedSurvey]);
+  }, [post?.id, wallet?.address, isOpen, hasUserCompletedSurvey]);
 
   // Check wallet status when modal opens
   useEffect(() => {
@@ -57,6 +76,33 @@ const SurveyModal = ({ isOpen, onClose, onSubmit, post }) => {
     };
     checkWalletStatus();
   }, [wallet?.address, isOpen]);
+
+  // Show loading while checking completion
+  if (isCheckingCompletion && isOpen) {
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50"
+          onClick={onClose}
+        />
+        <div className="flex min-h-full items-center justify-center p-4">
+          <motion.div
+            {...scaleIn}
+            className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
+          >
+            <div className="text-center py-8">
+              <div className="w-16 h-16 border-4 border-movement-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Loading Survey...</h3>
+              <p className="text-gray-600">Checking your eligibility</p>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   // Show message if already completed
   if (alreadyCompleted) {

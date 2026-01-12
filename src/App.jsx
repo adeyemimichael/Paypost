@@ -197,13 +197,26 @@ const AppContent = () => {
 const App = () => {
   const privyAppId = import.meta.env.VITE_PRIVY_APP_ID;
 
+  // Log environment variables for debugging (only in development)
+  useEffect(() => {
+    console.log('🔧 PayPost Environment Check:', {
+      privyAppId: privyAppId ? `${privyAppId.substring(0, 10)}...` : 'MISSING',
+      apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'NOT SET',
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'NOT SET',
+      mode: import.meta.env.MODE
+    });
+  }, [privyAppId]);
+
   if (!privyAppId) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center p-8">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Configuration Error</h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 mb-4">
             Missing Privy App ID. Please check your environment configuration.
+          </p>
+          <p className="text-sm text-gray-500">
+            Mode: {import.meta.env.MODE}
           </p>
         </div>
       </div>

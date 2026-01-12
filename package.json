@@ -11,7 +11,7 @@
     "contract:deploy": "node deploy.js"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^1.32.0",
+    "@privy-io/react-auth": "^1.99.1",
     "axios": "^1.6.0",
     "framer-motion": "^10.12.4",
     "lucide-react": "^0.263.1",

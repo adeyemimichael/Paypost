@@ -5,12 +5,34 @@ export default defineConfig({
   plugins: [react()],
   define: {
     global: 'globalThis',
-    'process.env': {}
+    'process.env': {},
+    'process.browser': true,
   },
   resolve: {
     alias: {
       '@': '/src',
     },
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        intro: `
+          if (typeof globalThis !== 'undefined') {
+            globalThis.Request = globalThis.Request || (typeof Request !== 'undefined' ? Request : undefined);
+            globalThis.Response = globalThis.Response || (typeof Response !== 'undefined' ? Response : undefined);
+            globalThis.Headers = globalThis.Headers || (typeof Headers !== 'undefined' ? Headers : undefined);
+            globalThis.fetch = globalThis.fetch || (typeof fetch !== 'undefined' ? fetch : undefined);
+          }
+        `
+      }
+    }
   },
   server: {
     proxy: {

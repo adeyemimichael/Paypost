@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { 
   Gift, 
   CheckCircle, 
-  Heart, 
   Clock, 
   Users, 
   Timer, 
@@ -27,8 +25,7 @@ import SurveyModal from './SurveyModal';
 
 const PostCard = ({ post, onComplete }) => {
   const { isAuthenticated, user, isCreator } = useUserStore();
-  const { isSurveyCompleted, isPostUnlocked, checkSurveyCompletion, checkPostAccess, unlockPost, isLoading, getCompleteSurveyPayload, refreshAfterAction } = usePostStore();
-  const { wallets } = useWallets();
+  const { isSurveyCompleted, isPostUnlocked, checkSurveyCompletion, checkPostAccess, unlockPost, isLoading } = usePostStore();
   const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [hasCompleted, setHasCompleted] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -69,31 +66,13 @@ const PostCard = ({ post, onComplete }) => {
 
   const handleSurveyComplete = async (responses) => {
     // This is called when the user finishes the survey in the modal
-    // We need to submit the transaction here
+    // The SurveyModal handles the blockchain submission and balance update
+    // We just need to update local state here
     
-    const wallet = wallets[0];
-    if (!wallet) {
-      alert("Please connect your wallet to submit.");
-      return;
-    }
-
-    try {
-      const payload = getCompleteSurveyPayload(post.id);
-      
-      // Sign and submit
-      const txHash = await wallet.sendTransaction(payload);
-      console.log("Survey Completion TX:", txHash);
-      
-      // Refresh state
-      await refreshAfterAction(wallet.address);
-      setHasCompleted(true);
-      setShowSurveyModal(false);
-      
-      if (onComplete) onComplete(post.id);
-    } catch (error) {
-      console.error("Failed to submit survey:", error);
-      alert("Failed to submit survey to blockchain. See console.");
-    }
+    setHasCompleted(true);
+    setShowSurveyModal(false);
+    
+    if (onComplete) onComplete(post.id);
   };
 
   const handleUnlockPost = async () => {
